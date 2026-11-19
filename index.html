@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>파란 선 마을</title>
+<meta name="description" content="파란 선 집 그림으로 마을을 짓고 감상하고, 틀린 그림 찾기를 하는 게임">
+<meta name="theme-color" content="#3f7fe8">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="파란선마을">
+<meta property="og:title" content="파란 선 마을">
+<meta property="og:description" content="파란 선 집 그림으로 마을을 짓고 감상하고, 틀린 그림 찾기를 하는 게임">
+<meta property="og:type" content="website">
+<style>html{-webkit-text-size-adjust:100%}body{margin:0;font-size:14px}[hidden]{display:none!important}</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Jua&display=swap">
+<style>
+  /* Layout: full-bleed 3D board; toolbar on top, hint strip + category drawer at the bottom.
+     Spot-the-difference is a full-screen overlay with two synced views. One deliberate paper-blue look. */
+  :root {
+    --paper: #f3f7ff;
+    --ink: #1d3f86;
+    --blue: #3f7fe8;
+    --blue-deep: #1b5fd6;
+    --blue-soft: #dbe7fd;
+    --card: rgba(255, 255, 255, 0.92);
+    --danger: #d64045;
+    --found: #e5484d;
+    --font-display: "Jua", "Gowun Dodum", system-ui, sans-serif;
+    --font-body: "Gowun Dodum", system-ui, -apple-system, "Malgun Gothic", sans-serif;
+    color-scheme: light;
+  }
+  html, body { height: 100%; }
+  body { background: var(--paper); color: var(--ink); font-family: var(--font-body); overflow: hidden; }
+  body.night { --paper: #0d1730; --ink: #e3ecff; --card: rgba(18, 32, 66, 0.9); --blue-soft: #22396b; --blue: #8fb6ff; --blue-deep: #b9d0ff; }
+  #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  body.painting #scene { cursor: crosshair; }
+
+  button { font: 400 15px var(--font-display); color: var(--blue); background: var(--card); border: 2px solid var(--blue); border-radius: 999px; padding: 6px 12px; cursor: pointer; white-space: nowrap; transition: background .15s, color .15s; }
+  button:hover:not(:disabled), button[aria-pressed="true"] { background: var(--blue); color: var(--paper); }
+  button:disabled { opacity: .4; cursor: default; }
+  button:focus-visible { outline: 3px solid var(--blue-deep); outline-offset: 2px; }
+  button.danger { color: var(--danger); border-color: var(--danger); }
+  button.danger:hover { background: var(--danger); color: #fff; }
+  button.primary { background: var(--blue); color: var(--paper); }
+
+  header {
+    position: fixed; top: 0; left: 0; right: 0;
+    padding-top: calc(10px + env(safe-area-inset-top, 0px)); padding-bottom: 10px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; pointer-events: none;
+  }
+  header > * { pointer-events: auto; }
+  h1 { margin: 0; font: 400 24px var(--font-display); color: var(--blue); }
+  .tools { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+  .menu { position: relative; }
+  .menu-pop { position: absolute; right: 0; top: calc(100% + 6px); background: var(--card); border: 2px solid var(--blue); border-radius: 14px; padding: 8px; display: grid; gap: 6px; min-width: 210px; z-index: 5; }
+  .menu-pop button { border-radius: 10px; text-align: left; }
+
+  .bottom {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: grid; gap: 8px; pointer-events: none;
+  }
+  .bottom > * { pointer-events: auto; }
+  .hint { justify-self: center; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; background: var(--card); border: 2px solid var(--blue); border-radius: 16px; padding: 6px 8px 6px 14px; max-width: 100%; }
+  .hint span { font-size: 15px; }
+  .hint span b { font-family: var(--font-display); font-weight: 400; color: var(--blue); }
+  .drawer { background: var(--card); border: 2px solid var(--blue); border-radius: 18px; padding: 8px; display: grid; gap: 8px; min-width: 0; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tabs button { padding: 4px 11px; font-size: 14px; }
+  .tabs button small { font-family: var(--font-body); opacity: .7; margin-left: 3px; }
+  .cards { display: flex; flex-wrap: wrap; gap: 6px; max-height: 30vh; overflow-y: auto; }
+  .pick { width: 76px; height: 88px; border-radius: 12px; padding: 4px; display: grid; grid-template-rows: 1fr auto; place-items: center; gap: 2px; }
+  .pick img { width: 58px; height: 58px; object-fit: contain; pointer-events: none; }
+  .pick small { font: 400 13px var(--font-display); }
+
+  #exitView { position: fixed; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); }
+  body.appreciate header, body.appreciate .bottom { display: none; }
+  body:not(.appreciate) #exitView { display: none; }
+
+  #toast { position: fixed; top: calc(64px + env(safe-area-inset-top, 0px)); left: 50%; transform: translate(-50%, -8px); background: var(--blue-deep); color: var(--paper); font: 400 15px var(--font-display); padding: 7px 16px; border-radius: 999px; opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; max-width: calc(100% - 32px); text-align: center; z-index: 30; }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+  #toast.good { background: var(--found); }
+
+  /* spot the difference */
+  #spot { position: fixed; inset: 0; z-index: 20; background: var(--paper); display: grid; grid-template-rows: auto 1fr; }
+  .spot-bar {
+    padding-top: calc(10px + env(safe-area-inset-top, 0px)); padding-bottom: 10px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  }
+  .spot-bar h2 { margin: 0; font: 400 22px var(--font-display); color: var(--blue); }
+  .spot-bar .score { font: 400 17px var(--font-display); color: var(--ink); margin-right: auto; display: flex; gap: 4px; align-items: center; }
+  .dots { display: inline-flex; gap: 4px; margin-left: 6px; }
+  .dots i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--found); display: inline-block; }
+  .dots i.on { background: var(--found); }
+  .spot-views {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px; min-height: 0;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .spot-view { position: relative; min-width: 0; min-height: 0; border: 2px solid var(--blue); border-radius: 16px; overflow: hidden; }
+  .spot-view canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  .spot-view span { position: absolute; top: 8px; left: 8px; background: var(--card); border: 2px solid var(--blue); border-radius: 999px; padding: 2px 10px; font: 400 14px var(--font-display); color: var(--blue); pointer-events: none; }
+  @media (max-aspect-ratio: 1/1) { .spot-views { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; } }
+
+  #loading { position: fixed; inset: 0; display: grid; place-items: center; background: var(--paper); font: 400 20px var(--font-display); color: var(--blue); z-index: 40; }
+
+  @media (max-width: 640px) {
+    h1 { font-size: 20px; }
+    button { font-size: 14px; padding: 5px 10px; }
+    .tabs button { padding: 3px 9px; font-size: 13px; }
+    .tabs button small { display: none; }
+    .pick { width: 64px; height: 76px; }
+    .pick img { width: 48px; height: 48px; }
+    .pick small { font-size: 12px; }
+    .label-long { display: none; }
+    .spot-bar h2 { font-size: 18px; }
+  }
+  @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
+</style>
+
+</head>
+<body>
+<canvas id="scene" aria-label="마을을 짓는 3D 바닥"></canvas>
+
+<header>
+  <h1>파란 선 마을</h1>
+  <div class="tools">
+    <button id="bUndo" type="button" title="되돌리기 (Ctrl+Z)">↶<span class="label-long"> 되돌리기</span></button>
+    <button id="bRedo" type="button" title="다시하기 (Ctrl+Y)">↷<span class="label-long"> 다시하기</span></button>
+    <button id="bRoads" type="button">길 잇기</button>
+    <button id="bDeco" type="button">꾸미기</button>
+    <button id="bSpot" type="button">틀린 그림</button>
+    <button id="bView" type="button">감상</button>
+    <button id="bNight" type="button" aria-pressed="false">밤</button>
+    <div class="menu">
+      <button id="bMenu" type="button" aria-expanded="false" aria-controls="menuPop" aria-label="더 보기">⋯</button>
+      <div class="menu-pop" id="menuPop" hidden>
+        <button id="bExample" type="button">예시 마을 다시 짓기</button>
+        <button id="bNew" type="button" class="danger">새 마을 (모두 비우기)</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="bottom">
+  <div class="hint" id="hint" role="status" aria-live="polite"></div>
+  <div class="drawer">
+    <div class="tabs" id="tabs" role="tablist" aria-label="분류"></div>
+    <div class="cards" id="cards"></div>
+  </div>
+</div>
+
+<button id="exitView" type="button">감상 끝내기</button>
+
+<div id="spot" hidden>
+  <div class="spot-bar">
+    <h2>틀린 그림 찾기</h2>
+    <div class="score" id="spotScore" role="status" aria-live="polite"></div>
+    <button id="spotHint" type="button">힌트</button>
+    <button id="spotNew" type="button">새 문제</button>
+    <button id="spotExit" type="button">끝내기</button>
+  </div>
+  <div class="spot-views">
+    <div class="spot-view"><canvas id="spotA" aria-label="원래 마을"></canvas><span>원래 마을</span></div>
+    <div class="spot-view"><canvas id="spotB" aria-label="바뀐 마을"></canvas><span>바뀐 마을</span></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<div id="loading">마을을 준비하는 중…</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="js/grid.js"></script>
+<script src="js/roads.js"></script>
+<script src="js/decorate.js"></script>
+<script src="js/spot.js"></script>
+<script src="js/cats.js"></script>
+<script src="js/sheet.js"></script>
+<script src="js/models3d.js"></script>
+<script src="js/house3d.js"></script>
+<script src="js/scene.js"></script>
+<script src="js/main.js"></script>
+
+<script src="js/pwa.js"></script>
+</body>
+</html>

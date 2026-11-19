@@ -1,0 +1,30 @@
+{
+  "name": "파란 선 마을",
+  "short_name": "파란선마을",
+  "description": "파란 선 집 그림으로 마을을 짓고 감상하고, 틀린 그림 찾기를 하는 게임",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f3f7ff",
+  "theme_color": "#3f7fe8",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
