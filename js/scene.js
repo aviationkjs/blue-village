@@ -64,7 +64,7 @@
       floorMesh.instanceMatrix.needsUpdate = true;
       if (floorMesh.instanceColor) floorMesh.instanceColor.needsUpdate = true;
       groundCode = v.ground;
-      if (groundCode === undefined) { groundDay.copy(DAY.ground); groundNight.copy(NIGHT.ground); }
+      if (groundCode === undefined) { groundDay.copy(SEASON_GROUND[season] ? new THREE.Color(SEASON_GROUND[season]) : DAY.ground); groundNight.copy(NIGHT.ground); }
       else { groundDay.setHex(Models.colorHex(groundCode)); groundNight.copy(groundDay).multiplyScalar(0.42).lerp(NIGHT.ground, 0.35); }
       groundMat.color.copy(groundDay).lerp(groundNight, night);
     }
@@ -91,7 +91,9 @@
     const roadGroup = new THREE.Group(); scene.add(roadGroup);
     let roadCells = new Set();
 
+    let lastV = null;
     function sync(v, popId) {
+      lastV = v;
       const seen = new Set();
       v.items.forEach(it => {
         if (it.kind === 'road') return;
@@ -108,11 +110,15 @@
             if (base) { o.userData.paintIdx = n++; o.userData.paintBase = base; o.userData.baseMat = o.material; }
           });
           objects.add(obj);
+          // leaves of trees and bushes follow the season; roofs (soft surfaces of buildings) get snow in winter
+          const leafy = it.kind === 'deco' && ['tree', 'roundTree', 'bush'].includes(it.ref);
+          obj.traverse(o => { if (o.userData.paintBase === 'soft') { if (leafy) o.userData.leaf = true; else if (it.kind === 'house' || it.kind === 'model') o.userData.roofish = true; } });
           rec = { obj, sig, paintSig: '' };
           live.set(it.id, rec);
         }
         const ps = it.paint ? JSON.stringify(it.paint) : '';
-        if (ps !== rec.paintSig) { rec.paintSig = ps; applyPaint(rec.obj, it.paint); }
+        rec.paint = it.paint;
+        if (ps !== rec.paintSig || rec.season !== season) { rec.paintSig = ps; rec.season = season; applyPaint(rec.obj, it.paint); }
         rec.obj.position.set(worldX(it), 0, worldZ(it));
         rec.obj.rotation.y = it.rot * Math.PI / 2;
         if (it.id === popId) rec.obj.userData.pop = 1;
@@ -128,7 +134,7 @@
       obj.traverse(o => {
         if (o.userData.paintIdx === undefined) return;
         const c = paint ? paint[o.userData.paintIdx] : undefined;
-        o.material = c !== undefined ? Models.paintMat(c, o.userData.paintBase) : o.userData.baseMat;
+        o.material = c !== undefined ? Models.paintMat(c, o.userData.paintBase) : (seasonMat(o) || o.userData.baseMat);
       });
     }
     // paintable surfaces of one building: [{ idx, base }]
@@ -229,6 +235,79 @@
       return Math.hypot(o.x + d.x * t, o.z + d.z * t) < 34;
     }
 
+
+    // ---- seasons: leaves and snowy roofs follow the season unless painted; the round land tints too
+    let season = 'summer';
+    const SEASON_GROUND = { spring: 0xeef6e4, summer: null, autumn: 0xf6ead6, winter: 0xf4f8ff };
+    const SEASON_BOARD = { spring: null, summer: null, autumn: 0xfcf6ec, winter: 0xffffff };
+    function seasonMat(o) {
+      if (o.userData.leaf) {
+        if (season === 'spring') return M.blossom;
+        if (season === 'autumn') return o.userData.paintIdx % 2 ? M.autumn1 : M.autumn2;
+        if (season === 'winter') return M.snow;
+      } else if (season === 'winter' && o.userData.paintBase === 'soft' && o.userData.roofish) return M.snow;
+      return null;
+    }
+    function setSeason(s) {
+      season = s;
+      live.forEach(rec => applyPaint(rec.obj, rec.paint));
+      floorSig = ''; if (lastV) syncFloor(lastV);
+      const b = SEASON_BOARD[s]; boardDay.copy(b ? new THREE.Color(b) : DAY.board);
+      setNight(night);
+    }
+    const boardDay = DAY.board.clone();
+
+    // ---- weather: rain streaks, snowflakes, a rainbow that stays behind the village from where you look
+    let weather = 'clear';
+    const weatherGroup = new THREE.Group(); scene.add(weatherGroup);
+    const RAIN_N = 1400, SNOW_N = 900, SPAN = 30, TOPY = 16;
+    const rainPos = new Float32Array(RAIN_N * 6);
+    const rainGeo = new THREE.BufferGeometry(); rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
+    const rainMat = new THREE.LineBasicMaterial({ color: 0x7fa6e8, transparent: true, opacity: 0.55, fog: false });
+    const rain = new THREE.LineSegments(rainGeo, rainMat); rain.frustumCulled = false; rain.visible = false; weatherGroup.add(rain);
+    const rainV = new Float32Array(RAIN_N);
+    for (let i = 0; i < RAIN_N; i++) { const x = (Math.random() - 0.5) * SPAN, y = Math.random() * TOPY, z = (Math.random() - 0.5) * SPAN; rainPos.set([x, y, z, x - 0.05, y + 0.55, z], i * 6); rainV[i] = 14 + Math.random() * 6; }
+    const flake = (() => { const c = document.createElement('canvas'); c.width = c.height = 32; const x = c.getContext('2d'); const g = x.createRadialGradient(16, 16, 0, 16, 16, 16); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.6, 'rgba(255,255,255,0.8)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 32, 32); return new THREE.CanvasTexture(c); })();
+    const snowPos = new Float32Array(SNOW_N * 3), snowPh = new Float32Array(SNOW_N);
+    for (let i = 0; i < SNOW_N; i++) { snowPos.set([(Math.random() - 0.5) * SPAN, Math.random() * TOPY, (Math.random() - 0.5) * SPAN], i * 3); snowPh[i] = Math.random() * 6.28; }
+    const snowGeo = new THREE.BufferGeometry(); snowGeo.setAttribute('position', new THREE.BufferAttribute(snowPos, 3));
+    const snowMat = new THREE.PointsMaterial({ size: 0.28, map: flake, transparent: true, depthWrite: false, color: 0xffffff, fog: false });
+    const snow = new THREE.Points(snowGeo, snowMat); snow.frustumCulled = false; snow.visible = false; weatherGroup.add(snow);
+    const rainbow = new THREE.Group(); rainbow.visible = false; scene.add(rainbow);
+    [0xff6b6b, 0xffa94d, 0xffd43b, 0x69db7c, 0x4dabf7, 0x5c7cfa, 0xb197fc].forEach((c, i) => {
+      const m = new THREE.Mesh(new THREE.TorusGeometry(26 - i * 0.9, 0.45, 8, 64, Math.PI), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.55, fog: false, depthWrite: false }));
+      rainbow.add(m);
+    });
+    function setWeather(w) {
+      weather = w;
+      rain.visible = w === 'rain'; snow.visible = w === 'snow'; rainbow.visible = w === 'rainbow';
+      setNight(night);
+    }
+    function moveWeather(dt, t) {
+      if (rain.visible) {
+        for (let i = 0; i < RAIN_N; i++) {
+          const o = i * 6; let y = rainPos[o + 1] - rainV[i] * dt;
+          if (y < 0) { y += TOPY; rainPos[o] = rainPos[o + 3] = (Math.random() - 0.5) * SPAN; rainPos[o + 2] = rainPos[o + 5] = (Math.random() - 0.5) * SPAN; rainPos[o + 3] -= 0.05; }
+          rainPos[o + 1] = y; rainPos[o + 4] = y + 0.55;
+        }
+        rainGeo.attributes.position.needsUpdate = true;
+      }
+      if (snow.visible) {
+        for (let i = 0; i < SNOW_N; i++) {
+          const o = i * 3; let y = snowPos[o + 1] - dt * 1.1;
+          if (y < 0) { y += TOPY; snowPos[o] = (Math.random() - 0.5) * SPAN; snowPos[o + 2] = (Math.random() - 0.5) * SPAN; }
+          snowPos[o + 1] = y; snowPos[o] += Math.sin(t * 0.8 + snowPh[i]) * dt * 0.35;
+        }
+        snowGeo.attributes.position.needsUpdate = true;
+      }
+      if (rainbow.visible) {
+        // stand on the far side of the village from the camera, facing it
+        const dx = camera.position.x - controls.target.x, dz = camera.position.z - controls.target.z, l = Math.hypot(dx, dz) || 1;
+        rainbow.position.set(controls.target.x - dx / l * 22, -4, controls.target.z - dz / l * 22);
+        rainbow.rotation.y = Math.atan2(dx, dz);
+      }
+    }
+
     // ---- cars for the appreciate mode
     const cars = [];
     function makeCar() {
@@ -278,12 +357,18 @@
     function setNight(t) {
       night = t;
       const mix = k => DAY[k].clone().lerp(NIGHT[k], t);
-      scene.background.copy(mix('bg')); scene.fog.color.copy(mix('bg'));
+      scene.background.copy(mix('bg'));
+      if (typeof weather !== 'undefined' && (weather === 'rain' || weather === 'snow')) scene.background.lerp(new THREE.Color(weather === 'rain' ? 0xb9c6dc : 0xdfe7f3), 0.45 * (1 - t));
+      scene.fog.color.copy(scene.background);
       M.fill.color.copy(mix('fill'));
       [M.line, M.blue, M.flag, dashMat, gridMat].forEach(m => m.color.copy(mix('line')));
       M.soft.color.copy(mix('soft')); M.win.color.copy(mix('win')); M.lamp.color.copy(mix('lamp'));
       groundMat.color.copy(groundDay).lerp(groundNight, t);
-      floorMat.color.setRGB(1, 1, 1).lerp(tmpC.setRGB(0.4, 0.45, 0.62), t); boardMat.color.copy(mix('board')); roadMat.color.copy(mix('road'));
+      floorMat.color.setRGB(1, 1, 1).lerp(tmpC.setRGB(0.4, 0.45, 0.62), t); roadMat.color.copy(mix('road'));
+      boardMat.color.copy(typeof boardDay !== 'undefined' ? boardDay.clone().lerp(NIGHT.board, t) : mix('board'));
+      M.water.color.setHex(0xbcd7ff).lerp(new THREE.Color(0x2a4580), t);
+      [M.blossom, M.autumn1, M.autumn2, M.snow].forEach((m, i) => m.color.setHex([0xffc9de, 0xffa94d, 0xff8787, 0xffffff][i]).multiplyScalar(1 - 0.5 * t));
+      if (typeof rainMat !== 'undefined') { rainMat.color.setHex(t > 0.5 ? 0x8fb6ff : 0x7fa6e8); snowMat.opacity = 1 - 0.3 * t; rainbow.children.forEach(m => { m.material.opacity = 0.55 * (1 - t); }); }
       hemi.intensity = 0.75 - 0.35 * t; sun.intensity = 0.45 - 0.3 * t;
       starMat.opacity = t;
       Models.setPaintNight(t);
@@ -305,6 +390,16 @@
 
     // ---- still picture of the current view at any size (wallpaper, village list thumbnails)
     function capture(w, h, o = {}) {
+      // o.elev (degrees above the ground): place the camera at that angle, keep the direction, fit the board
+      const saved = o.elev !== undefined ? { p: camera.position.clone(), up: camera.up.clone() } : null;
+      if (saved) {
+        const tg = controls.target, dx = camera.position.x - tg.x, dz = camera.position.z - tg.z, l = Math.hypot(dx, dz) || 1;
+        const el = Math.max(4, Math.min(89.5, o.elev)) * Math.PI / 180;
+        const vf = (o.fov || (w / h < 0.8 ? 62 : 45)) * Math.PI / 180, hf = 2 * Math.atan(Math.tan(vf / 2) * w / h);
+        const R = HALF * 1.2, dist = R / Math.sin(Math.min(vf, hf) / 2) * (o.elev >= 80 ? 0.78 : o.elev < 10 ? 0.6 : 0.9);
+        camera.position.set(tg.x + dx / l * Math.cos(el) * dist, tg.y + Math.sin(el) * dist, tg.z + dz / l * Math.cos(el) * dist);
+        camera.lookAt(tg);
+      }
       const prevNight = night, hidden = [grid, sel, selPad, pad, markers, ghost].filter(x => x && x.visible);
       hidden.forEach(x => { x.visible = false; });
       if (o.night !== undefined) setNight(o.night);
@@ -315,6 +410,7 @@
       const url = renderer.domElement.toDataURL(o.type || 'image/png', o.quality || 0.92);
       hidden.forEach(x => { x.visible = true; });
       if (o.night !== undefined) setNight(prevNight);
+      if (saved) { camera.position.copy(saved.p); camera.lookAt(controls.target); }
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       resize();
       renderer.render(scene, camera);
@@ -366,7 +462,7 @@
 
     const clock = new THREE.Clock();
     if (opts.grid === false) grid.visible = false;
-    const api = { renderer, scene, camera, controls, sync, setGhost, setSelected, pickCell, pickItemId, pickPart, paintParts, hitsGround, capture, setNight, startCars, stopCars, thumbnail, addMarker, clearMarkers, resize, setInsets, grid, paused: false, get night() { return night; }, onFrame: null };
+    const api = { renderer, scene, camera, controls, sync, setGhost, setSelected, pickCell, pickItemId, pickPart, paintParts, hitsGround, capture, setSeason, setWeather, setNight, startCars, stopCars, thumbnail, addMarker, clearMarkers, resize, setInsets, grid, paused: false, get night() { return night; }, onFrame: null };
     (function tick() {
       requestAnimationFrame(tick);
       if (api.paused) { clock.getDelta(); return; }
@@ -387,7 +483,7 @@
         }
       });
       if (sel.visible) sel.position.y = 0.04 + Math.abs(Math.sin(t * 3)) * 0.05;
-      moveCars(dt);
+      moveCars(dt); moveWeather(dt, t);
       controls.update();
       renderer.render(scene, camera);
     })();

@@ -12,6 +12,12 @@
     win: new THREE.MeshBasicMaterial({ color: DAY.win, ...off }),
     lamp: new THREE.MeshBasicMaterial({ color: DAY.lamp }),
     flag: new THREE.MeshBasicMaterial({ color: DAY.line, side: THREE.DoubleSide }),
+    water: new THREE.MeshLambertMaterial({ color: 0xbcd7ff, ...off }),
+    // seasons: blossom, two autumn leaves, snow
+    blossom: new THREE.MeshLambertMaterial({ color: 0xffc9de, side: THREE.DoubleSide, ...off }),
+    autumn1: new THREE.MeshLambertMaterial({ color: 0xffa94d, side: THREE.DoubleSide, ...off }),
+    autumn2: new THREE.MeshLambertMaterial({ color: 0xff8787, side: THREE.DoubleSide, ...off }),
+    snow: new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide, ...off }),
     glow: null, // lamp light pool on the ground, made below once a canvas exists
   };
   (function () {
@@ -198,9 +204,77 @@
     return g;
   };
 
+
+  // ---- park pieces (built in grid units, scale 1)
+  B.fountain = () => {
+    const g = new THREE.Group();
+    const ring = new THREE.CylinderGeometry(0.85, 0.92, 0.28, 20);
+    part(ring, g, 0, 0.14, 0);
+    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.76, 0.76, 0.04, 20), M.water); w.position.y = 0.25; g.add(w);
+    part(new THREE.CylinderGeometry(0.1, 0.14, 0.7, 10), g, 0, 0.5, 0);
+    part(new THREE.CylinderGeometry(0.38, 0.3, 0.1, 16), g, 0, 0.86, 0);
+    const jets = [];
+    for (let i = 0; i < 8; i++) {
+      const d = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 4), M.water); d.userData.smoke = true; g.add(d); jets.push({ d, a: i / 8 * Math.PI * 2, t: i / 8 });
+    }
+    g.userData.tick = (t, dt) => jets.forEach(j => {
+      j.t = (j.t + dt * 0.7) % 1;
+      const r = 0.1 + j.t * 0.55;
+      j.d.position.set(Math.cos(j.a) * r, 0.95 + Math.sin(j.t * Math.PI) * 0.45 - j.t * 0.55, Math.sin(j.a) * r);
+    });
+    return g;
+  };
+  B.pond = () => {
+    const g = new THREE.Group();
+    const s = new THREE.Shape();
+    s.moveTo(-0.85, 0); s.bezierCurveTo(-0.9, 0.7, 0.2, 0.95, 0.75, 0.5); s.bezierCurveTo(1.05, 0.1, 0.8, -0.8, 0.1, -0.85); s.bezierCurveTo(-0.6, -0.9, -0.8, -0.5, -0.85, 0);
+    const water = new THREE.ShapeGeometry(s, 24); water.rotateX(-Math.PI / 2);
+    const w = new THREE.Mesh(water, M.water); w.position.y = 0.03; g.add(w);
+    const edge = new THREE.Line(new THREE.BufferGeometry().setFromPoints(s.getPoints(40).map(p => new THREE.Vector3(p.x, 0.035, -p.y))), M.line); g.add(edge);
+    [[0.3, 0.2], [-0.35, -0.25], [0.05, -0.45]].forEach(([x, z], i) => {
+      const pad = new THREE.CylinderGeometry(0.13, 0.13, 0.02, 10);
+      part(pad, g, x, 0.05, z, M.soft).rotation.y = i;
+    });
+    [[0.85, 0.65], [-0.8, 0.55], [0.7, -0.75]].forEach(([x, z]) => part(new THREE.DodecahedronGeometry(0.11, 0), g, x, 0.08, z));
+    return g;
+  };
+  B.bridge = () => {
+    const g = new THREE.Group();
+    const s = new THREE.Shape();
+    s.moveTo(-1, 0); s.quadraticCurveTo(0, 0.7, 1, 0); s.lineTo(0.9, 0); s.quadraticCurveTo(0, 0.55, -0.9, 0); s.closePath();
+    const deck = new THREE.ExtrudeGeometry(s, { depth: 0.5, bevelEnabled: false, curveSegments: 16 }); deck.translate(0, 0, -0.25);
+    part(deck, g, 0, 0, 0);
+    [-0.27, 0.27].forEach(z => {
+      for (let i = -3; i <= 3; i++) { const x = i * 0.27, y = 0.62 * (1 - (x * x)); bar(g, 0.04, 0.3, 0.04, x, y + 0.15, z); }
+      const pts = []; for (let i = 0; i <= 16; i++) { const x = -0.85 + i * 1.7 / 16; pts.push(new THREE.Vector3(x, 0.62 * (1 - x * x) + 0.3, z)); }
+      g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), M.line));
+    });
+    return g;
+  };
+  B.playground = () => {
+    const g = new THREE.Group();
+    // slide
+    part(box(0.5, 0.06, 0.5), g, -0.9, 0.8, -0.2);
+    [[-1.12, -0.42], [-0.68, -0.42], [-1.12, 0.02], [-0.68, 0.02]].forEach(([x, z]) => bar(g, 0.05, 0.8, 0.05, x, 0.4, z));
+    const sl = part(box(0.42, 0.05, 1.25), g, -0.9, 0.42, 0.55, M.soft); sl.rotation.x = 0.68;
+    for (let i = 0; i < 4; i++) bar(g, 0.42, 0.04, 0.04, -0.9, 0.18 + i * 0.18, -0.5);
+    // swings
+    const top = 1.15;
+    bar(g, 1.5, 0.06, 0.06, 0.65, top, 0);
+    [-0.1, 1.4].forEach(x => { const l = bar(g, 0.05, 1.2, 0.05, x, top / 2, 0.25); l.rotation.x = 0.2; const r = bar(g, 0.05, 1.2, 0.05, x, top / 2, -0.25); r.rotation.x = -0.2; });
+    const seats = [0.35, 0.95].map(x => {
+      const p = new THREE.Group(); p.position.set(x, top, 0); g.add(p);
+      bar(p, 0.02, 0.75, 0.02, -0.12, -0.375, 0); bar(p, 0.02, 0.75, 0.02, 0.12, -0.375, 0);
+      part(box(0.3, 0.05, 0.16), p, 0, -0.76, 0);
+      return p;
+    });
+    g.userData.tick = (t) => seats.forEach((p, i) => { p.rotation.x = Math.sin(t * 1.8 + i * 1.7) * 0.35; });
+    return g;
+  };
+
   // scale so each model fits its footprint in BV.Grid.MODEL_FP
-  const SCALE = { cottage: 0.62, greenhouse: 0.75, tower: 0.62, storeBox: 0.8, tripleGable: 0.5, castle: 0.48 };
-  const NAMES = { cottage: '오두막', greenhouse: '온실', tower: '전망탑', storeBox: '상자 창고', tripleGable: '세 지붕 집', castle: '작은 성' };
+  const SCALE = { fountain: 1, pond: 1, bridge: 1, playground: 1, cottage: 0.62, greenhouse: 0.75, tower: 0.62, storeBox: 0.8, tripleGable: 0.5, castle: 0.48 };
+  const NAMES = { fountain: '분수', pond: '연못', bridge: '다리', playground: '놀이터', cottage: '오두막', greenhouse: '온실', tower: '전망탑', storeBox: '상자 창고', tripleGable: '세 지붕 집', castle: '작은 성' };
 
   function model(ref) {
     const inner = (B[ref] || B.cottage)();
@@ -225,6 +299,25 @@
       pool.rotation.x = -Math.PI / 2; pool.position.y = 0.03; pool.renderOrder = 2; pool.userData.smoke = true; g.add(pool);
       return g;
     },
+    bench: () => {
+      const g = new THREE.Group();
+      part(box(0.8, 0.06, 0.3), g, 0, 0.3, 0);
+      part(box(0.8, 0.22, 0.05), g, 0, 0.48, -0.14, M.soft);
+      [-0.33, 0.33].forEach(x => { bar(g, 0.05, 0.3, 0.05, x, 0.15, 0.1); bar(g, 0.05, 0.5, 0.05, x, 0.25, -0.12); });
+      return g;
+    },
+    flowers: () => {
+      const g = new THREE.Group();
+      part(box(0.86, 0.14, 0.86), g, 0, 0.07, 0, M.soft);
+      const cols = [100 + 13 * 16 + 4, 100 + 3 * 16 + 4, 100 + 0 * 16 + 5, 100 + 11 * 16 + 5, 100 + 1 * 16 + 4];
+      for (let i = 0; i < 9; i++) {
+        const x = ((i % 3) - 1) * 0.26, z = (Math.floor(i / 3) - 1) * 0.26;
+        bar(g, 0.025, 0.18, 0.025, x, 0.22, z);
+        const f = new THREE.Mesh(new THREE.IcosahedronGeometry(0.07, 0), paintMat(cols[i % cols.length], 'fill'));
+        f.position.set(x, 0.33, z); g.add(f);
+      }
+      return g;
+    },
     fence: () => {
       const g = new THREE.Group();
       [-0.4, 0, 0.4].forEach(x => part(box(0.07, 0.42, 0.07), g, x, 0.21, 0));
@@ -232,7 +325,7 @@
       return g;
     },
   };
-  const DECO_NAMES = { tree: '뾰족 나무', roundTree: '둥근 나무', bush: '덤불', lamp: '가로등', fence: '울타리' };
+  const DECO_NAMES = { bench: '벤치', flowers: '꽃밭', tree: '뾰족 나무', roundTree: '둥근 나무', bush: '덤불', lamp: '가로등', fence: '울타리' };
   function deco(ref) { return (DECO[ref] || DECO.tree)(); }
 
   root.BV = root.BV || {};

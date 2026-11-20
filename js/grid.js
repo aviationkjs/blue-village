@@ -1,6 +1,6 @@
 // Village state: what sits on which cell. No rendering here.
 (function (root) {
-  const MODEL_FP = { cottage: [3, 2], greenhouse: [2, 2], tower: [3, 3], storeBox: [2, 2], tripleGable: [3, 2], castle: [3, 2] };
+  const MODEL_FP = { fountain: [2, 2], pond: [2, 2], bridge: [2, 1], playground: [3, 2], cottage: [3, 2], greenhouse: [2, 2], tower: [3, 3], storeBox: [2, 2], tripleGable: [3, 2], castle: [3, 2] };
 
   function create(size = 24) { return { size, items: [], nextId: 1 }; }
 

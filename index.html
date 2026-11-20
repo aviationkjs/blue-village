@@ -190,6 +190,17 @@
     .pick img { width: 38px; height: 38px; }
   }
 
+  /* sky popover, statue delete badge */
+  .tools { position: relative; }
+  .sky-pop { position: absolute; right: 0; top: calc(100% + 6px); background: var(--card); border: 2px solid var(--blue); border-radius: 14px; padding: 8px; display: grid; gap: 8px; z-index: 6; width: max-content; max-width: calc(100vw - 16px); }
+  .sky-row { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+  .sky-row span { font: 400 14px var(--font-display); color: var(--ink); width: 34px; }
+  .sky-row button { padding: 5px 11px; font-size: 14px; }
+  .pick-wrap { position: relative; flex: none; display: grid; }
+  .pick-del { position: absolute; top: -6px; right: -6px; min-width: 24px; height: 24px; padding: 0 6px; font-size: 13px; line-height: 1; border-color: var(--danger); color: var(--danger); background: var(--paper); z-index: 1; }
+  .pick-del[data-armed="1"] { background: var(--danger); color: #fff; }
+  .cards { padding-top: 6px; padding-right: 6px; }
+
   /* dialogs: village list, wallpaper, photo statue */
   .dlg { position: fixed; inset: 0; z-index: 25; background: rgba(13, 23, 48, 0.35); display: grid; place-items: center; padding: max(12px, env(safe-area-inset-top, 0px)) 12px max(12px, env(safe-area-inset-bottom, 0px)); }
   .dlg-box { box-sizing: border-box; width: min(440px, 100%); max-height: 100%; overflow-y: auto; background: var(--paper); border: 2px solid var(--blue); border-radius: 18px; padding: 12px; display: grid; gap: 10px; }
@@ -232,6 +243,7 @@
     <button id="bSpot" class="ib" type="button" aria-label="틀린 그림" title="틀린 그림"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg><span class="lbl">틀린 그림</span></button>
     <button id="bView" class="ib" type="button" aria-label="감상" title="감상"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span class="lbl">감상</span></button>
     <button id="bNight" class="ib" type="button" aria-label="밤" title="밤" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="i-moon" d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/><g class="i-sun"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></g></svg><span class="lbl">밤</span></button>
+    <div class="sky-pop" id="skyPop" hidden></div>
     <div class="menu">
       <button id="bMenu" class="ib" type="button" aria-expanded="false" aria-controls="menuPop" aria-label="더 보기" title="더 보기"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg></button>
       <div class="menu-pop" id="menuPop" hidden>
@@ -287,6 +299,7 @@
   <div class="dlg-box">
     <div class="dlg-head"><h2 id="wallTitle">배경화면 저장</h2><button type="button" data-close="wallDlg">닫기</button></div>
     <div class="dlg-row seg2"><button id="wallDay" type="button">낮</button><button id="wallNight" type="button">밤</button><span class="gap"></span><button id="wallPort" type="button">세로</button><button id="wallLand" type="button">가로</button></div>
+    <div class="dlg-row seg2" id="wallAngle"><span class="note">각도</span><button type="button" data-elev="undefined">지금</button><button type="button" data-elev="0">0°</button><button type="button" data-elev="45">45°</button><button type="button" data-elev="90">90°</button></div>
     <img id="wallImg" class="wall-img" alt="배경화면 미리보기">
     <small id="wallInfo" class="note"></small>
     <div class="dlg-row"><button id="wallSave" type="button" class="primary">사진으로 저장</button><button id="wallShare" type="button">공유 · 배경화면 설정</button></div>

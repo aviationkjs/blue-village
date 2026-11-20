@@ -5,10 +5,10 @@
   const D = node ? require('./decorate.js') : root.BV.Decorate;
 
   const cellsOf = it => { const c = []; for (let x = it.x; x < it.x + it.w; x++) for (let z = it.z; z < it.z + it.d; z++) c.push([x, z]); return c; };
-  const KIND_WORD = it => it.kind === 'house' ? '집' : it.kind === 'statue' ? '동상' : it.kind === 'model' ? '건물' : ({ tree: '나무', roundTree: '나무', bush: '덤불', lamp: '가로등', fence: '울타리' }[it.ref] || '꾸미기');
+  const KIND_WORD = it => it.kind === 'house' ? '집' : it.kind === 'statue' ? '동상' : it.kind === 'model' ? '건물' : ({ tree: '나무', roundTree: '나무', bush: '덤불', lamp: '가로등', fence: '울타리', bench: '벤치', flowers: '꽃밭' }[it.ref] || '꾸미기');
   // 이/가 by whether the last syllable has a final consonant
   const iga = w => { const c = w.charCodeAt(w.length - 1) - 0xAC00; return w + (c >= 0 && c % 28 ? '이' : '가'); };
-  const ADDS =['tree', 'roundTree', 'bush', 'lamp', 'fence'];
+  const ADDS =['tree', 'roundTree', 'bush', 'lamp', 'fence', 'bench', 'flowers'];
 
   function makeDiffs(v, count = 5, seed = 1, houseCount = 50) {
     const rand = D.rng(seed);

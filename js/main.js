@@ -175,10 +175,35 @@
       const label = document.createElement('small'); label.textContent = c.name;
       pick.append(img, label);
       pick.addEventListener('click', () => chooseCard(c));
-      box.append(pick);
+      if (c.kind !== 'statue') { box.append(pick); return; }
+      const wrap = document.createElement('div'); wrap.className = 'pick-wrap';
+      const del = document.createElement('button'); del.type = 'button'; del.className = 'pick-del'; del.textContent = '×';
+      del.setAttribute('aria-label', '이 동상 지우기'); del.title = '이 동상 지우기';
+      del.addEventListener('click', e => {
+        e.stopPropagation();
+        if (del.dataset.armed !== '1') { del.dataset.armed = '1'; del.textContent = '지울까요?'; setTimeout(() => { if (del.isConnected) { del.dataset.armed = ''; del.textContent = '×'; } }, 2500); return; }
+        deleteStatue(c.ref);
+      });
+      wrap.append(pick, del); box.append(wrap);
     });
   }
 
+  // removes the picture and every statue made from it, here (undoable) and in the other saved villages
+  function deleteStatue(id) {
+    const here = v.items.filter(i => i.kind === 'statue' && i.ref === id).length;
+    if (here) h.commit(() => { v.items = v.items.filter(i => !(i.kind === 'statue' && i.ref === id)); });
+    let elsewhere = 0;
+    slotList().forEach(s => {
+      if (s.id === curSlot) return;
+      const o = G.deserialize(store.get(keyOf(s.id)) || ''); if (!o) return;
+      const n = o.items.length; o.items = o.items.filter(i => !(i.kind === 'statue' && i.ref === id));
+      if (o.items.length !== n) { elsewhere += n - o.items.length; store.set(keyOf(s.id), G.serialize(o)); }
+    });
+    Statues.remove(id);
+    if (st.spec && st.spec.kind === 'statue' && st.spec.ref === id) cancel();
+    changed(); renderTabs(); renderCards();
+    toast('동상을 지웠어요' + (here + elsewhere ? ` · 마을에 세운 ${here + elsewhere}개도 함께 지웠어요` : ''));
+  }
   function chooseCard(c) {
     const same = isActive(c);
     select(null, true);
@@ -554,13 +579,45 @@
     h.commit(() => plan.forEach(d => G.place(v, d)));
     changed(); toast(`꾸미기 ${plan.length}개를 놓았어요 · 마음에 안 들면 되돌리기`);
   });
-  $('bNight').addEventListener('click', () => {
-    st.nightTarget = st.nightTarget ? 0 : 1;
-    $('bNight').setAttribute('aria-pressed', String(!!st.nightTarget));
-    const lbl = st.nightTarget ? '낮' : '밤';
-    $('bNight').querySelector('.lbl').textContent = lbl;
+  // ---------- sky: time of day, season, weather (one popover under the moon/sun button)
+  const SKY = 'bv-sky';
+  const sky = { night: 0, season: 'summer', weather: 'clear' };
+  try { Object.assign(sky, JSON.parse(store.get(SKY) || '{}')); } catch (e) { /* defaults */ }
+  const SEASONS = [['spring', '봄'], ['summer', '여름'], ['autumn', '가을'], ['winter', '겨울']];
+  const WEATHERS = [['clear', '맑음'], ['rain', '비'], ['snow', '눈'], ['rainbow', '무지개'], ['auto', '자동']];
+  let shownWeather = null;
+  function showWeather(w) { if (w !== shownWeather) { shownWeather = w; scene.setWeather(w); } }
+  function applySky() {
+    st.nightTarget = sky.night ? 1 : 0;
+    $('bNight').setAttribute('aria-pressed', String(!!sky.night));
+    const lbl = '하늘 · ' + (sky.night ? '밤' : '낮');
+    $('bNight').querySelector('.lbl').textContent = sky.night ? '밤' : '낮';
     $('bNight').setAttribute('aria-label', lbl); $('bNight').title = lbl;
+    scene.setSeason(sky.season);
+    if (spot.a) { spot.a.setSeason(sky.season); spot.b.setSeason(sky.season); }
+    showWeather(sky.weather === 'auto' ? (st.viewing ? autoW.now : 'clear') : sky.weather);
+    store.set(SKY, JSON.stringify(sky));
+    renderSky();
+  }
+  function renderSky() {
+    const box = $('skyPop'); box.replaceChildren();
+    const row = (title, list, cur, fn) => {
+      const r = document.createElement('div'); r.className = 'sky-row';
+      const t = document.createElement('span'); t.textContent = title; r.append(t);
+      list.forEach(([id, name]) => { const b = btn(name, () => fn(id)); b.setAttribute('aria-pressed', String(cur === id)); r.append(b); });
+      box.append(r);
+    };
+    row('시간', [[0, '낮'], [1, '밤']], sky.night ? 1 : 0, id => { sky.night = id; applySky(); });
+    row('계절', SEASONS, sky.season, id => { sky.season = id; applySky(); });
+    row('날씨', WEATHERS, sky.weather, id => { sky.weather = id; applySky(); if (id === 'auto') toast('감상 모드에서 날씨가 저절로 바뀌어요'); });
+  }
+  // automatic weather while appreciating: changes every 15 seconds
+  const autoW = { now: 'clear', t: 0, order: ['clear', 'rain', 'clear', 'rainbow', 'clear', 'snow'], i: 0 };
+  $('bNight').addEventListener('click', () => {
+    const p = $('skyPop'); p.hidden = !p.hidden;
+    $('bNight').setAttribute('aria-expanded', String(!p.hidden));
   });
+  document.addEventListener('pointerdown', e => { const p = $('skyPop'); if (!p.hidden && !e.target.closest('#skyPop, #bNight')) p.hidden = true; });
   function enterView() {
     cancel(); select(null);
     st.viewing = true; st.phase = st.nightTarget ? 0.5 : 0;
@@ -672,7 +729,7 @@
   $('slotCopy').addEventListener('click', () => newSlot('copy'));
 
   // ================= wallpaper =================
-  const wall = { night: false, land: false, url: '' };
+  const wall = { night: false, land: false, url: '', elev: undefined };
   function wallSize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 3);
     let w = Math.round(Math.min(screen.width, screen.height) * dpr), hh = Math.round(Math.max(screen.width, screen.height) * dpr);
@@ -681,9 +738,10 @@
   }
   function renderWall() {
     const [w, hh] = wallSize();
-    wall.url = scene.capture(w, hh, { night: wall.night ? 1 : 0 });
+    wall.url = scene.capture(w, hh, { night: wall.night ? 1 : 0, elev: wall.elev });
+    document.querySelectorAll('#wallAngle button').forEach(b => b.setAttribute('aria-pressed', String(String(wall.elev) === b.dataset.elev)));
     $('wallImg').src = wall.url;
-    $('wallInfo').textContent = `${w} × ${hh} · 지금 보이는 각도 그대로예요. 각도를 바꾸려면 닫고 화면을 돌린 뒤 다시 여세요`;
+    $('wallInfo').textContent = `${w} × ${hh} · ` + (wall.elev === undefined ? '지금 보이는 각도 그대로예요' : `${wall.elev}°: ${wall.elev === 0 ? '땅에서 정면으로' : wall.elev === 90 ? '하늘에서 내려다보기' : '비스듬히 위에서'} (방향은 지금 화면 기준)`);
     $('wallDay').setAttribute('aria-pressed', String(!wall.night)); $('wallNight').setAttribute('aria-pressed', String(wall.night));
     $('wallPort').setAttribute('aria-pressed', String(!wall.land)); $('wallLand').setAttribute('aria-pressed', String(wall.land));
   }
@@ -693,6 +751,7 @@
     pop.hidden = true; exitView(); cancel(); select(null);
     wall.night = scene.night > 0.5; openDlg('wallDlg'); renderWall();
   });
+  document.querySelectorAll('#wallAngle button').forEach(b => b.addEventListener('click', () => { wall.elev = b.dataset.elev === 'undefined' ? undefined : +b.dataset.elev; renderWall(); }));
   $('wallDay').addEventListener('click', () => { wall.night = false; renderWall(); });
   $('wallNight').addEventListener('click', () => { wall.night = true; renderWall(); });
   $('wallPort').addEventListener('click', () => { wall.land = false; renderWall(); });
@@ -762,6 +821,7 @@
   function setupSpot() {
     spot.a = Scene.create($('spotA'), { grid: false });
     spot.b = Scene.create($('spotB'), { grid: false });
+    spot.a.setSeason(sky.season); spot.b.setSeason(sky.season);
     let lock = false;
     [[spot.a, spot.b], [spot.b, spot.a]].forEach(([x, y]) => {
       x.controls.enableDamping = false;
@@ -856,6 +916,10 @@
     scene.onFrame = (dt) => {
       let target = st.nightTarget;
       if (st.viewing) { st.phase = (st.phase + dt / 60) % 1; target = 0.5 - 0.5 * Math.cos(st.phase * Math.PI * 2); }
+      if (sky.weather === 'auto') {
+        if (st.viewing) { autoW.t += dt; if (autoW.t > 15) { autoW.t = 0; autoW.i = (autoW.i + 1) % autoW.order.length; autoW.now = autoW.order[autoW.i]; } showWeather(autoW.now); }
+        else showWeather('clear');
+      }
       const n = scene.night;
       if (Math.abs(n - target) > 0.002) {
         const next = st.viewing ? target : n + (target - n) * Math.min(1, dt * 2.5);
@@ -864,6 +928,7 @@
       }
     };
     changed(); renderHint(); renderTabs(); renderCards();
+    applySky();
     fitInsets();
     $('loading').remove();
   }
