@@ -137,6 +137,14 @@
         o.material = c !== undefined ? Models.paintMat(c, o.userData.paintBase) : (seasonMat(o) || o.userData.baseMat);
       });
     }
+    // world-space centre of one kind of surface on a building (for number tags)
+    function partCenter(id, base) {
+      const rec = live.get(id); const box = new THREE.Box3();
+      if (!rec) return new THREE.Vector3();
+      rec.obj.updateMatrixWorld(true);
+      rec.obj.traverse(o => { if (o.userData.paintBase === base) box.expandByObject(o); });
+      return box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
+    }
     // paintable surfaces of one building: [{ idx, base }]
     function paintParts(id) {
       const rec = live.get(id); if (!rec) return [];
@@ -462,7 +470,7 @@
 
     const clock = new THREE.Clock();
     if (opts.grid === false) grid.visible = false;
-    const api = { renderer, scene, camera, controls, sync, setGhost, setSelected, pickCell, pickItemId, pickPart, paintParts, hitsGround, capture, setSeason, setWeather, setNight, startCars, stopCars, thumbnail, addMarker, clearMarkers, resize, setInsets, grid, paused: false, get night() { return night; }, onFrame: null };
+    const api = { renderer, scene, camera, controls, sync, setGhost, setSelected, pickCell, pickItemId, pickPart, paintParts, partCenter, hitsGround, capture, setSeason, setWeather, setNight, startCars, stopCars, thumbnail, addMarker, clearMarkers, resize, setInsets, grid, paused: false, get night() { return night; }, onFrame: null };
     (function tick() {
       requestAnimationFrame(tick);
       if (api.paused) { clock.getDelta(); return; }

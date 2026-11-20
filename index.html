@@ -191,6 +191,54 @@
     .pick img { width: 38px; height: 38px; }
   }
 
+
+  /* colouring templates */
+  #doan { position: fixed; inset: 0; z-index: 20; background: var(--paper); display: grid; gap: 6px;
+    grid-template-rows: auto minmax(0, 0.42fr) minmax(0, 1fr) auto auto auto;
+    grid-template-areas: "bar" "ref" "mine" "pal" "prog" "msg";
+    padding: calc(6px + env(safe-area-inset-top, 0px)) max(8px, env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px)); }
+  .doan-bar { grid-area: bar; display: flex; align-items: center; gap: 6px; }
+  .doan-bar button { padding: 4px 11px; font-size: 13px; }
+  .doan-title { flex: 1; text-align: center; font: 400 15px var(--font-display); color: var(--blue); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .doan-stars { font-size: 15px; color: #e0a100; letter-spacing: 1px; }
+  .doan-view { position: relative; min-height: 0; border: 2px solid var(--blue); border-radius: 14px; overflow: hidden; background: #fff; }
+  .doan-ref { grid-area: ref; border-width: 1.5px; }
+  .doan-mine { grid-area: mine; border-color: var(--blue-deep); }
+  .doan-view canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  .doan-view .tag { position: absolute; top: 6px; left: 8px; font: 400 12px var(--font-display); color: var(--blue); background: var(--card); border: 1.5px solid var(--blue); border-radius: 999px; padding: 1px 9px; pointer-events: none; }
+  .doan-view .tag.r { left: auto; right: 8px; }
+  .doan-view .tag.soft { border: 0; background: transparent; }
+  .doan-view .tag.strong { background: var(--blue-deep); color: #fff; border-color: var(--blue-deep); }
+  .doan-labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+  .doan-lbl { position: absolute; transform: translate(-50%, -50%); min-width: 18px; height: 18px; padding: 0 4px; border-radius: 999px; background: rgba(255,255,255,.88); border: 1.5px solid #9aaed8; color: #5a6fa0; font: 400 11px/15px var(--font-display); text-align: center; }
+  .doan-lbl.now { border-color: var(--blue-deep); color: var(--blue-deep); background: #fff; }
+  .doan-lbl.wrong { border-color: var(--danger); color: var(--danger); }
+  .doan-pal { grid-area: pal; display: flex; flex-wrap: wrap; justify-content: center; gap: 7px; }
+  .dsw { width: 40px; height: 40px; padding: 0; border-radius: 50%; background: var(--c); border: 2px solid var(--blue); font: 400 15px var(--font-display); position: relative; }
+  .dsw:hover:not(:disabled), .dsw[aria-pressed="true"] { background: var(--c); }
+  .dsw[aria-pressed="true"] { border: 3px solid var(--blue-deep); box-shadow: 0 0 0 3px var(--card), 0 0 0 5px var(--blue-deep); }
+  .dsw.finished::after { content: '✓'; position: absolute; right: -4px; top: -4px; width: 16px; height: 16px; border-radius: 50%; background: #2f9e44; color: #fff; font-size: 11px; line-height: 16px; }
+  .doan-pal.many .dsw { width: 34px; height: 34px; font-size: 13px; }
+  .doan-prog { grid-area: prog; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink); }
+  .doan-prog .bar { flex: 1; height: 8px; border-radius: 999px; background: var(--blue-soft); overflow: hidden; }
+  .doan-prog .bar i { display: block; height: 100%; width: 0; background: var(--blue); transition: width .3s; }
+  .doan-msg { grid-area: msg; text-align: center; font: 400 14px var(--font-display); color: var(--blue); background: var(--card); border: 1.5px solid var(--blue); border-radius: 12px; padding: 5px 10px; }
+  .doan-done { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(13, 23, 48, 0.3); padding: 16px; }
+  .doan-done .dlg-box { text-align: center; justify-items: center; }
+  .done-stars { font-size: 40px; color: #e0a100; letter-spacing: 4px; }
+  .done-title { font: 400 22px var(--font-display); color: var(--blue); }
+  .doan-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .doan-card { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 8px; text-align: left; border-radius: 12px; padding: 6px 10px; }
+  .doan-card b { grid-row: span 2; align-self: center; font: 400 20px var(--font-display); width: 28px; text-align: center; }
+  .doan-card span { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .doan-card small { color: #e0a100; font-size: 12px; letter-spacing: 1px; }
+  .doan-card.done { border-color: var(--blue-deep); }
+  @media (min-aspect-ratio: 1/1) and (max-height: 600px) {
+    #doan { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); grid-template-rows: auto minmax(0, 1fr) auto auto auto;
+      grid-template-areas: "bar bar" "ref mine" "pal pal" "prog prog" "msg msg"; }
+    .dsw { width: 34px; height: 34px; font-size: 13px; }
+  }
+
   /* sky popover, statue delete badge */
   .tools { position: relative; }
   .sky-pop { position: absolute; right: 0; top: calc(100% + 6px); background: var(--card); border: 2px solid var(--blue); border-radius: 14px; padding: 8px; display: grid; gap: 8px; z-index: 6; width: max-content; max-width: calc(100vw - 16px); }
@@ -248,6 +296,7 @@
     <div class="menu">
       <button id="bMenu" class="ib" type="button" aria-expanded="false" aria-controls="menuPop" aria-label="더 보기" title="더 보기"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg></button>
       <div class="menu-pop" id="menuPop" hidden>
+        <button id="bDoan" type="button">칠하기 도안 (20개)</button>
         <button id="bSlots" type="button">마을 목록 (여러 마을 저장)</button>
         <button id="bWall" type="button">배경화면 저장</button>
         <button id="bRainbow" type="button">무지개 자동 칠하기</button>
@@ -287,6 +336,38 @@
   </div>
 </div>
 
+
+
+<div id="doan" hidden>
+  <div class="doan-bar">
+    <button id="doanExit" type="button">나가기</button>
+    <span id="doanTitle" class="doan-title"></span>
+    <span id="doanStars" class="doan-stars"></span>
+    <button id="doanHint" type="button">힌트</button>
+  </div>
+  <div class="doan-view doan-ref"><canvas id="doanA" aria-label="견본 마을"></canvas><span class="tag">견본</span><span class="tag r soft">같이 돌아가요</span></div>
+  <div class="doan-view doan-mine"><canvas id="doanB" aria-label="내 마을"></canvas><div id="doanLabels" class="doan-labels"></div><span class="tag">내 마을</span><span class="tag r strong" id="doanCount"></span></div>
+  <div class="doan-pal" id="doanPal" role="group" aria-label="도안 색"></div>
+  <div class="doan-prog"><div class="bar"><i id="doanBar"></i></div><span id="doanPct"></span></div>
+  <div class="doan-msg" id="doanMsg" role="status" aria-live="polite"></div>
+  <div class="doan-done" id="doanDone" hidden>
+    <div class="dlg-box">
+      <div class="done-stars" id="doanDoneStars"></div>
+      <div class="done-title">다 칠했어요</div>
+      <small class="note" id="doanDoneText"></small>
+      <div class="dlg-row"><button id="doanNext" type="button" class="primary">다음 도안</button><button id="doanAgain" type="button">다시 하기</button><button id="doanList2" type="button">목록</button></div>
+    </div>
+  </div>
+</div>
+
+<div id="doanDlg" class="dlg" hidden role="dialog" aria-modal="true" aria-labelledby="doanDlgTitle">
+  <div class="dlg-box">
+    <div class="dlg-head"><h2 id="doanDlgTitle">칠하기 도안</h2><button type="button" data-close="doanDlg">닫기</button></div>
+    <small class="note">견본과 똑같이 칠해 보세요. 다 칠하면 별 1개, 틀린 색 3번 이하면 1개, 힌트 없이 끝내면 1개를 더 받아요.</small>
+    <div id="doanList" class="doan-list"></div>
+    <small class="note" id="doanTotal"></small>
+  </div>
+</div>
 
 <div id="slotDlg" class="dlg" hidden role="dialog" aria-modal="true" aria-labelledby="slotTitle">
   <div class="dlg-box">
@@ -354,6 +435,7 @@
 <script src="js/models3d.js"></script>
 <script src="js/house3d.js"></script>
 <script src="js/photo.js"></script>
+<script src="js/doan.js"></script>
 <script src="js/scene.js"></script>
 <script src="js/main.js"></script>
 

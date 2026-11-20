@@ -811,6 +811,209 @@
   function closeDlg(id) { $(id).hidden = true; }
   document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => closeDlg(b.dataset.close)));
 
+
+  // ================= colouring templates (칠하기 도안) =================
+  const DOAN = 'bv-doan';
+  const dz = { a: null, b: null, i: 0, vA: null, vB: null, groups: [], pal: [], cur: 0, mistakes: 0, hints: 0, open: false, labels: [] };
+  const doanStars = () => { try { return JSON.parse(store.get(DOAN) || '{}') || {}; } catch (e) { return {}; } };
+  const starText = n => '★'.repeat(n) + '☆'.repeat(3 - n);
+  function renderDoanList() {
+    const box = $('doanList'); box.replaceChildren();
+    const got = doanStars();
+    BV.Doan.LEVELS.forEach((L, i) => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'doan-card' + (got[i] ? ' done' : '');
+      const n = document.createElement('b'); n.textContent = i + 1;
+      const nm = document.createElement('span'); nm.textContent = L.name;
+      const st2 = document.createElement('small'); st2.textContent = starText(got[i] || 0);
+      b.append(n, nm, st2); b.addEventListener('click', () => { closeDlg('doanDlg'); startDoan(i); });
+      box.append(b);
+    });
+    const total = Object.values(got).reduce((a, x) => a + x, 0);
+    $('doanTotal').textContent = `모은 별 ${total} / ${BV.Doan.LEVELS.length * 3}`;
+  }
+  $('bDoan').addEventListener('click', () => { pop.hidden = true; renderDoanList(); openDlg('doanDlg'); });
+
+  function setupDoan() {
+    dz.a = Scene.create($('doanA'), { grid: false });
+    dz.b = Scene.create($('doanB'), { grid: false });
+    let lock = false;
+    [[dz.a, dz.b], [dz.b, dz.a]].forEach(([x, y]) => {
+      x.controls.enableDamping = false;
+      x.controls.addEventListener('change', () => { if (lock) return; lock = true; copyCam(x, y); lock = false; });
+    });
+    const cv = $('doanB'); let d = null;
+    cv.addEventListener('pointerdown', e => { d = { x: e.clientX, y: e.clientY, id: e.pointerId, multi: d && d.id !== e.pointerId }; });
+    cv.addEventListener('pointerup', e => { if (d && !d.multi && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 7) doanTap(e.clientX, e.clientY); d = null; });
+    dz.b.onFrame = placeLabels;
+    window.addEventListener('resize', () => { if (dz.open) { dz.a.resize(); dz.b.resize(); } });
+  }
+  // a group = all surfaces of one kind (walls, roofs/leaves, windows) on one building, or every road cell
+  function buildGroups() {
+    const L = BV.Doan.LEVELS[dz.i];
+    dz.groups = []; dz.pal = [];
+    const addPal = c => { if (!dz.pal.includes(c)) dz.pal.push(c); };
+    dz.vB.items.forEach(it => {
+      if (it.tpl === undefined) return;
+      const o = L.items[it.tpl];
+      const parts = dz.b.paintParts(it.id);
+      [['fill', o.w], ['soft', o.s], ['win', o.n]].forEach(([base, col]) => {
+        if (col === undefined) return;
+        const idx = parts.filter(p => p.base === base).map(p => p.idx);
+        if (!idx.length) return;
+        addPal(col);
+        dz.groups.push({ key: it.id + ':' + base, id: it.id, base, idx, target: col, cur: undefined, center: dz.b.partCenter(it.id, base) });
+      });
+    });
+    if (L.road !== null && L.road !== undefined && L.roads.length) {
+      addPal(L.road);
+      const mid = L.roads[Math.floor(L.roads.length / 2)];
+      dz.groups.push({ key: 'road', base: 'road', target: L.road, cur: undefined, center: new THREE.Vector3(mid[0] + 0.5 - dz.vB.size / 2, 0.05, mid[1] + 0.5 - dz.vB.size / 2) });
+    }
+  }
+  function paintGroup(v2, g, c) {
+    if (g.base === 'road') { v2.items.forEach(r => { if (r.kind === 'road') r.paint = { 0: c }; }); return; }
+    const it = v2.items.find(x => x.id === g.id); if (!it) return;
+    const p = { ...(it.paint || {}) }; g.idx.forEach(i => { p[i] = c; }); it.paint = p;
+  }
+  function fitDoanCam() {
+    const its = dz.vA.items; const H2 = dz.vA.size / 2;
+    let x0 = 99, x1 = -99, z0 = 99, z1 = -99;
+    its.forEach(it => { x0 = Math.min(x0, it.x); x1 = Math.max(x1, it.x + it.w); z0 = Math.min(z0, it.z); z1 = Math.max(z1, it.z + it.d); });
+    const cx = (x0 + x1) / 2 - H2, cz = (z0 + z1) / 2 - H2, span = Math.max(x1 - x0, z1 - z0, 6);
+    const t = new THREE.Vector3(cx, 0.6, cz);
+    dz.a.controls.target.copy(t);
+    dz.a.camera.position.set(cx + span * 0.55, span * 0.62 + 2.2, cz + span * 0.72);
+    dz.a.controls.update(); copyCam(dz.a, dz.b);
+  }
+  function startDoan(i) {
+    exitView(); cancel(); select(null);
+    dz.i = i; dz.mistakes = 0; dz.hints = 0; dz.cur = 0;
+    $('doan').hidden = false; dz.open = true;
+    scene.paused = true;
+    if (!dz.a) setupDoan();
+    dz.a.paused = dz.b.paused = false;
+    dz.a.setNight(0);
+    dz.a.resize(); dz.b.resize();
+    dz.vA = BV.Doan.village(i); dz.vB = BV.Doan.village(i);
+    dz.a.sync(dz.vA); dz.b.sync(dz.vB);
+    dz.a.clearMarkers(); dz.b.clearMarkers();
+    buildGroups();
+    dz.groups.forEach(g => paintGroup(dz.vA, g, g.target));
+    dz.a.sync(dz.vA);
+    fitDoanCam();
+    const L = BV.Doan.LEVELS[i];
+    $('doanTitle').textContent = `도안 ${i + 1} · ${L.name}`;
+    $('doanDone').hidden = true;
+    makeLabels(); renderDoanPal(); renderDoanProgress();
+  }
+  function closeDoan() {
+    $('doan').hidden = true; dz.open = false;
+    dz.a.paused = dz.b.paused = true;
+    scene.paused = false; scene.setNight(scene.night);
+  }
+  $('doanExit').addEventListener('click', closeDoan);
+  $('doanList2').addEventListener('click', () => { closeDoan(); renderDoanList(); openDlg('doanDlg'); });
+  $('doanAgain').addEventListener('click', () => startDoan(dz.i));
+  $('doanNext').addEventListener('click', () => startDoan((dz.i + 1) % BV.Doan.LEVELS.length));
+
+  function renderDoanPal() {
+    const box = $('doanPal'); box.replaceChildren();
+    box.classList.toggle('many', dz.pal.length > 8);
+    dz.pal.forEach((c, n) => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'dsw';
+      b.style.setProperty('--c', hexCss(c));
+      b.style.color = new THREE.Color(Models.colorHex(c)).getHSL({}).l > 0.6 ? '#1d3f86' : '#fff';
+      b.textContent = n + 1; b.setAttribute('aria-label', `${n + 1}번 ${Models.colorName(c)}`);
+      b.setAttribute('aria-pressed', String(dz.cur === n));
+      const left = dz.groups.some(g => g.target === c && g.cur !== c);
+      b.classList.toggle('finished', !left);
+      b.addEventListener('click', () => { dz.cur = n; renderDoanPal(); doanMsg(); });
+      box.append(b);
+    });
+    doanMsg();
+  }
+  function doanMsg(text) {
+    const c = dz.pal[dz.cur];
+    $('doanMsg').textContent = text || `${dz.cur + 1}번 ${Models.colorName(c)} · 흐린 ${dz.cur + 1}이 적힌 면을 눌러요`;
+  }
+  function renderDoanProgress() {
+    const ok = dz.groups.filter(g => g.cur === g.target).length, total = dz.groups.length;
+    $('doanCount').textContent = `맞은 면 ${ok} / ${total}`;
+    const pct = total ? Math.round(ok / total * 100) : 0;
+    $('doanBar').style.width = pct + '%'; $('doanPct').textContent = pct + '%';
+    $('doanStars').textContent = starText(doanStars()[dz.i] || 0);
+    if (total && ok === total) finishDoan();
+  }
+  // number tags on surfaces still to colour; positions follow the camera every frame
+  function makeLabels() {
+    const box = $('doanLabels'); box.replaceChildren();
+    dz.labels = dz.groups.map(g => {
+      const el = document.createElement('span'); el.className = 'doan-lbl';
+      el.textContent = dz.pal.indexOf(g.target) + 1; box.append(el);
+      return { g, el };
+    });
+  }
+  const tmpV = new THREE.Vector3();
+  function placeLabels() {
+    if (!dz.open) return;
+    const cv = $('doanB'), w = cv.clientWidth, h = cv.clientHeight;
+    dz.labels.forEach(({ g, el }) => {
+      if (g.cur === g.target) { el.hidden = true; return; }
+      tmpV.copy(g.center).project(dz.b.camera);
+      const out = tmpV.z > 1 || Math.abs(tmpV.x) > 1.05 || Math.abs(tmpV.y) > 1.05;
+      el.hidden = out;
+      if (!out) { el.style.left = ((tmpV.x + 1) / 2 * w) + 'px'; el.style.top = ((1 - tmpV.y) / 2 * h) + 'px'; }
+      el.classList.toggle('now', dz.pal.indexOf(g.target) === dz.cur);
+      el.classList.toggle('wrong', g.cur !== undefined && g.cur !== g.target);
+    });
+  }
+  function doanTap(cx, cy) {
+    if (!dz.groups.length || !$('doanDone').hidden) return;
+    let g = null;
+    const part = dz.b.pickPart(cx, cy);
+    if (part) {
+      const it = dz.vB.items.find(x => x.id === part.itemId);
+      g = dz.groups.find(x => x.key === part.itemId + ':' + part.base);
+      if (!g && it) { doanMsg('이 면은 칠하지 않아도 돼요'); return; }
+    } else {
+      const cell = dz.b.pickCell(cx, cy);
+      const it = cell && G.itemAt(dz.vB, cell[0], cell[1]);
+      if (it && it.kind === 'road') g = dz.groups.find(x => x.key === 'road');
+    }
+    if (!g) return;
+    const c = dz.pal[dz.cur];
+    if (g.cur === c) return;
+    g.cur = c;
+    paintGroup(dz.vB, g, c);
+    dz.b.sync(dz.vB, g.id);
+    if (c !== g.target) {
+      dz.mistakes++;
+      doanMsg(`앗, 여기는 ${dz.pal.indexOf(g.target) + 1}번 색이에요. 다시 칠할 수 있어요`);
+      if (navigator.vibrate) try { navigator.vibrate([30, 40, 30]); } catch (e) { /* ignore */ }
+    } else doanMsg();
+    renderDoanPal(); renderDoanProgress();
+  }
+  $('doanHint').addEventListener('click', () => {
+    if (!dz.open) return;
+    const g = dz.groups.find(x => x.cur !== x.target); if (!g) return;
+    dz.hints++;
+    dz.cur = dz.pal.indexOf(g.target); renderDoanPal();
+    const it = g.id ? dz.vB.items.find(x => x.id === g.id) : null;
+    const area = it || (() => { const r = BV.Doan.LEVELS[dz.i].roads; const m = r[Math.floor(r.length / 2)]; return { x: m[0], z: m[1], w: 1, d: 1 }; })();
+    dz.b.addMarker(area, 0xf2a516, 2.2); dz.a.addMarker(area, 0xf2a516, 2.2);
+    doanMsg(`노란 동그라미 쪽을 ${dz.cur + 1}번 색으로 칠해 보세요`);
+  });
+  function finishDoan() {
+    const stars = 1 + (dz.mistakes <= 3 ? 1 : 0) + (dz.hints === 0 ? 1 : 0);
+    const all = doanStars(); const best = Math.max(all[dz.i] || 0, stars); all[dz.i] = best; store.set(DOAN, JSON.stringify(all));
+    $('doanStars').textContent = starText(best);
+    $('doanDoneStars').textContent = starText(stars);
+    $('doanDoneText').textContent = `틀린 색 ${dz.mistakes}번 · 힌트 ${dz.hints}번` + (stars === 3 ? ' · 완벽해요!' : stars === 2 ? ' · 힌트 없이 하면 별 3개' : ' · 틀린 색 3번 이하면 별이 하나 더');
+    $('doanNext').hidden = dz.i === BV.Doan.LEVELS.length - 1;
+    $('doanDone').hidden = false;
+    doanMsg('다 칠했어요!');
+  }
+
   // ---------- spot the difference
   const spot = { a: null, b: null, round: null, found: new Set(), lastSeed: 0, open: false };
   function copyCam(from, to) {
@@ -901,6 +1104,7 @@
     if (e.target.closest && e.target.closest('input, textarea')) return;
     const open = document.querySelector('.dlg:not([hidden])');
     if (open) { if (e.key === 'Escape') open.hidden = true; return; }
+    if (dz.open) { if (e.key === 'Escape') closeDoan(); return; }
     const k = e.key.toLowerCase();
     if (spot.open) { if (k === 'escape') closeSpot(); return; }
     if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
