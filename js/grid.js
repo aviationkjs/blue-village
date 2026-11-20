@@ -85,6 +85,13 @@
       const ok = o.items.every(i => i && typeof i.id === 'number' && typeof i.kind === 'string' &&
         [i.x, i.z, i.w, i.d, i.rot].every(n => Number.isInteger(n)));
       if (!ok) return null;
+      // paint: { surfaceIndex: paletteIndex } — drop anything malformed rather than the whole village
+      o.items.forEach(i => {
+        if (i.paint === undefined) return;
+        if (!i.paint || typeof i.paint !== 'object') { delete i.paint; return; }
+        Object.keys(i.paint).forEach(k => { if (!Number.isInteger(i.paint[k]) || !/^\d+$/.test(k)) delete i.paint[k]; });
+        if (!Object.keys(i.paint).length) delete i.paint;
+      });
       const nextId = Math.max(o.nextId | 0, ...o.items.map(i => i.id + 1), 1);
       return { size: o.size, items: o.items, nextId };
     } catch (e) { return null; }

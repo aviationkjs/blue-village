@@ -70,11 +70,18 @@
         if (!rec || rec.sig !== sig) {
           if (rec) objects.remove(rec.obj);
           const obj = buildObject(it);
-          obj.traverse(o => { o.userData.itemId = it.id; });
+          let n = 0;
+          obj.traverse(o => {
+            o.userData.itemId = it.id;
+            const base = o.isMesh && !o.userData.smoke ? Models.paintBaseOf(o.material) : null;
+            if (base) { o.userData.paintIdx = n++; o.userData.paintBase = base; o.userData.baseMat = o.material; }
+          });
           objects.add(obj);
-          rec = { obj, sig };
+          rec = { obj, sig, paintSig: '' };
           live.set(it.id, rec);
         }
+        const ps = it.paint ? JSON.stringify(it.paint) : '';
+        if (ps !== rec.paintSig) { rec.paintSig = ps; applyPaint(rec.obj, it.paint); }
         rec.obj.position.set(worldX(it), 0, worldZ(it));
         rec.obj.rotation.y = it.rot * Math.PI / 2;
         if (it.id === popId) rec.obj.userData.pop = 1;
@@ -83,6 +90,21 @@
       const roads = v.items.filter(i => i.kind === 'road');
       const sig = roads.map(r => r.x + ',' + r.z).sort().join(';');
       if (sig !== roadSig) { roadSig = sig; buildRoads(v, roads); }
+    }
+
+    function applyPaint(obj, paint) {
+      obj.traverse(o => {
+        if (o.userData.paintIdx === undefined) return;
+        const c = paint ? paint[o.userData.paintIdx] : undefined;
+        o.material = c !== undefined ? Models.paintMat(c, o.userData.paintBase) : o.userData.baseMat;
+      });
+    }
+    // paintable surfaces of one building: [{ idx, base }]
+    function paintParts(id) {
+      const rec = live.get(id); if (!rec) return [];
+      const out = [];
+      rec.obj.traverse(o => { if (o.userData.paintIdx !== undefined) out.push({ idx: o.userData.paintIdx, base: o.userData.paintBase }); });
+      return out;
     }
 
     const tileGeo = new THREE.PlaneGeometry(1, 1); tileGeo.rotateX(-Math.PI / 2);
@@ -157,6 +179,15 @@
       return hit ? hit.object.userData.itemId : null;
     }
 
+    // the surface under the finger: skips thin outline bars sitting just in front of it
+    function pickPart(cx, cy) {
+      aim(cx, cy);
+      const hits = ray.intersectObjects(objects.children, true).filter(h => h.object.isMesh && !h.object.userData.smoke);
+      if (!hits.length) return null;
+      const h = hits.find(x => x.object.userData.paintIdx !== undefined && x.distance <= hits[0].distance + 0.35);
+      return h ? { itemId: h.object.userData.itemId, idx: h.object.userData.paintIdx, base: h.object.userData.paintBase } : null;
+    }
+
     // ---- cars for the appreciate mode
     const cars = [];
     function makeCar() {
@@ -213,6 +244,7 @@
       groundMat.color.copy(mix('ground')); boardMat.color.copy(mix('board')); roadMat.color.copy(mix('road'));
       hemi.intensity = 0.75 - 0.35 * t; sun.intensity = 0.45 - 0.3 * t;
       starMat.opacity = t;
+      Models.setPaintNight(t);
     }
 
     // ---- rings that mark found differences (and hints)
@@ -274,7 +306,7 @@
 
     const clock = new THREE.Clock();
     if (opts.grid === false) grid.visible = false;
-    const api = { renderer, scene, camera, controls, sync, setGhost, setSelected, pickCell, pickItemId, setNight, startCars, stopCars, thumbnail, addMarker, clearMarkers, resize, setInsets, grid, paused: false, get night() { return night; }, onFrame: null };
+    const api = { renderer, scene, camera, controls, sync, setGhost, setSelected, pickCell, pickItemId, pickPart, paintParts, setNight, startCars, stopCars, thumbnail, addMarker, clearMarkers, resize, setInsets, grid, paused: false, get night() { return night; }, onFrame: null };
     (function tick() {
       requestAnimationFrame(tick);
       if (api.paused) { clock.getDelta(); return; }

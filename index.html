@@ -124,6 +124,16 @@
   .fold svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; transition: transform .2s; }
   .drawer.folded .fold svg { transform: rotate(180deg); }
   .drawer.folded .cards { display: none; }
+  /* paint mode: the drawer becomes a colour palette */
+  body.coloring .drawer-top, body.coloring .cards { display: none; }
+  body:not(.coloring) .palette { display: none; }
+  .palette { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .sw { width: 44px; height: 44px; padding: 0; border-radius: 50%; border: 3px solid var(--card); box-shadow: 0 0 0 2px var(--blue); background: var(--c); flex: none; }
+  .sw:hover:not(:disabled) { background: var(--c); }
+  .sw[aria-checked="true"] { box-shadow: 0 0 0 3px var(--blue-deep), 0 0 0 6px var(--card); transform: scale(1.08); }
+  .sw.white { background: #fff; display: grid; place-items: center; color: var(--blue); font-size: 12px; }
+  .palette .auto { margin-left: auto; }
+  .rainbow-text { background: linear-gradient(90deg, #ff6b6b, #ffa94d, #e0b000, #40c057, #4dabf7, #7950f2, #e64980); -webkit-background-clip: text; background-clip: text; color: transparent; }
 
   @media (max-width: 640px), (max-height: 520px) {
     header { padding: calc(6px + env(safe-area-inset-top, 0px)) max(8px, env(safe-area-inset-right, 0px)) 6px max(8px, env(safe-area-inset-left, 0px)); }
@@ -148,6 +158,14 @@
     .pick { flex: none; width: 62px; height: 70px; border-radius: 10px; padding: 3px; }
     .pick img { width: 44px; height: 44px; }
     .pick small { font-size: 12px; }
+    .ib { width: 36px; height: 36px; }
+    .palette { flex-wrap: nowrap; overflow-x: auto; gap: 7px; padding: 4px 2px; scrollbar-width: none; }
+    .palette::-webkit-scrollbar { display: none; }
+    .sw { width: 31px; height: 31px; border-width: 2px; }
+    .sw.white { font-size: 10px; }
+    .palette { gap: 5px; justify-content: space-between; }
+    .spot-bar .lbl-s { display: none; }
+    .spot-bar button { padding: 4px 9px; }
 
     #toast { top: calc(56px + env(safe-area-inset-top, 0px)); font-size: 14px; }
     .spot-bar { padding: calc(6px + env(safe-area-inset-top, 0px)) max(8px, env(safe-area-inset-right, 0px)) 6px max(8px, env(safe-area-inset-left, 0px)); gap: 6px; }
@@ -173,6 +191,7 @@
   <div class="tools">
     <button id="bUndo" class="ib" type="button" aria-label="되돌리기" title="되돌리기"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6L4 11l5 5"/><path d="M4 11h10a5 5 0 0 1 0 10h-3"/></svg><span class="lbl">되돌리기</span></button>
     <button id="bRedo" class="ib" type="button" aria-label="다시하기" title="다시하기"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l5 5-5 5"/><path d="M20 11H10a5 5 0 0 0 0 10h3"/></svg><span class="lbl">다시하기</span></button>
+    <button id="bPaint" class="ib" type="button" aria-label="칠하기" title="칠하기" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 4.5l5 5-7.5 7.5-5-5z"/><path d="M7 12c-2.2.3-3.3 1.8-3.4 3.8-.1 1.6-.7 2.6-1.6 3.2 3.2 1 6.6.4 7.9-1.9.6-1.1.6-2.2.1-3.1"/></svg><span class="lbl">칠하기</span></button>
     <button id="bRoads" class="ib" type="button" aria-label="길 잇기" title="길 잇기"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3L5 21M16 3l3 18M12 4v3M12 10.5v3M12 17v3"/></svg><span class="lbl">길 잇기</span></button>
     <button id="bDeco" class="ib" type="button" aria-label="꾸미기" title="꾸미기"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="6"/><path d="M12 15v6M9 21h6"/></svg><span class="lbl">꾸미기</span></button>
     <button id="bSpot" class="ib" type="button" aria-label="틀린 그림" title="틀린 그림"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg><span class="lbl">틀린 그림</span></button>
@@ -181,6 +200,8 @@
     <div class="menu">
       <button id="bMenu" class="ib" type="button" aria-expanded="false" aria-controls="menuPop" aria-label="더 보기" title="더 보기"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg></button>
       <div class="menu-pop" id="menuPop" hidden>
+        <button id="bRainbow" type="button">무지개 자동 칠하기</button>
+        <button id="bUnpaint" type="button">색 모두 지우기</button>
         <button id="bExample" type="button">예시 마을 다시 짓기</button>
         <button id="bNew" type="button" class="danger">새 마을 (모두 비우기)</button>
       </div>
@@ -196,6 +217,7 @@
       <button id="bFold" class="fold" type="button" aria-expanded="true" aria-controls="cards" aria-label="카드 접기" title="카드 접기"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
     </div>
     <div class="cards" id="cards"></div>
+    <div class="palette" id="palette" role="radiogroup" aria-label="칠할 색"></div>
   </div>
 </div>
 

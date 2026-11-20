@@ -225,5 +225,32 @@
   function deco(ref) { return (DECO[ref] || DECO.tree)(); }
 
   root.BV = root.BV || {};
-  root.BV.Models = { DAY, NIGHT, M, part, box, bar, gable, hipRoof, windowOn, leaf, addSmoke, model, deco, NAMES, DECO_NAMES, MODEL_REFS: Object.keys(NAMES), DECO_REFS: Object.keys(DECO) };
+  // ---- rainbow paint: one shared material per colour and surface kind, darkened at night like the rest
+  const PALETTE = [
+    { name: '빨강', hex: 0xff6b6b }, { name: '주황', hex: 0xffa94d }, { name: '노랑', hex: 0xffd43b }, { name: '초록', hex: 0x69db7c },
+    { name: '하늘', hex: 0x4dabf7 }, { name: '남색', hex: 0x5c7cfa }, { name: '보라', hex: 0xb197fc }, { name: '분홍', hex: 0xf783ac },
+  ];
+  const paintMats = {};
+  let paintNightT = 0;
+  function paintNightColor(day, base) {
+    return base === 'win' ? day.clone().lerp(NIGHT.win, 0.55) : day.clone().multiplyScalar(0.62).lerp(NIGHT.fill, 0.2);
+  }
+  function paintMat(ci, base) {
+    const key = ci + ':' + base;
+    if (paintMats[key]) return paintMats[key].mat;
+    const day = C(PALETTE[ci % PALETTE.length].hex);
+    const opt = { color: day.clone(), ...off };
+    const mat = base === 'win' ? new THREE.MeshBasicMaterial(opt) : new THREE.MeshLambertMaterial({ ...opt, side: base === 'soft' ? THREE.DoubleSide : THREE.FrontSide });
+    paintMats[key] = { mat, day, night: paintNightColor(day, base) };
+    mat.color.copy(day).lerp(paintMats[key].night, paintNightT);
+    return mat;
+  }
+  function setPaintNight(t) {
+    paintNightT = t;
+    Object.values(paintMats).forEach(p => p.mat.color.copy(p.day).lerp(p.night, t));
+  }
+  // which shared material a mesh started with decides whether (and how) it can be painted
+  function paintBaseOf(mat) { return mat === M.fill ? 'fill' : mat === M.soft ? 'soft' : mat === M.win ? 'win' : null; }
+
+  root.BV.Models = { PALETTE, paintMat, setPaintNight, paintBaseOf, DAY, NIGHT, M, part, box, bar, gable, hipRoof, windowOn, leaf, addSmoke, model, deco, NAMES, DECO_NAMES, MODEL_REFS: Object.keys(NAMES), DECO_REFS: Object.keys(DECO) };
 })(this);

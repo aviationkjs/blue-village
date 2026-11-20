@@ -32,9 +32,20 @@
   const h = new G.History(v);
 
   // mode: idle | place | paint | erase | move
-  const st = { mode: 'idle', spec: null, sel: null, cat: Cats.CATS[0].id, viewing: false, nightTarget: 0, phase: 0 };
+  const st = { color: 0, mode: 'idle', spec: null, sel: null, cat: Cats.CATS[0].id, viewing: false, nightTarget: 0, phase: 0 };
   let scene;
 
+  const painted = () => v.items.some(i => i.paint);
+  let wasRainbow = null;
+  function updateTitle() {
+    const r = painted();
+    const name = r ? '무지개 마을' : '파란 선 마을';
+    const h1 = document.querySelector('h1');
+    h1.textContent = name; h1.classList.toggle('rainbow-text', r);
+    document.title = name;
+    if (wasRainbow === false && r) toast('🌈 무지개 마을이 되었어요!', true);
+    wasRainbow = r;
+  }
   const nameOf = it => it.kind === 'house' ? '집 ' + (+it.ref + 1) : it.kind === 'model' ? Models.NAMES[it.ref] : it.kind === 'road' ? '길' : (Models.DECO_NAMES[it.ref] || '꾸미기');
   const selItem = () => v.items.find(i => i.id === st.sel) || null;
 
@@ -51,6 +62,7 @@
     scene.setSelected(selItem());
     $('bUndo').disabled = !h.past.length;
     $('bRedo').disabled = !h.future.length;
+    updateTitle();
   }
 
   // ---------- hint strip
@@ -64,6 +76,10 @@
       text.append(strong(nameOf(st.spec)), ' 칸을 눌러 놓으세요');
       if (st.spec.kind !== 'road') el.append(btn('돌리기', rotateAction));
       el.append(btn('그만', cancel));
+    } else if (st.mode === 'color') {
+      const c = st.color < 0 ? '흰색(지우기)' : Models.PALETTE[st.color].name;
+      text.append(strong(c), ' 면 누르기 · 길게 누르면 통째로');
+      el.append(btn('🌈 자동', rainbowAll), btn('그만', cancel));
     } else if (st.mode === 'paint') {
       text.append(strong('길'), ' 칸을 누르거나 끌어서 깔아요');
       el.append(btn('그만', cancel));
@@ -143,6 +159,9 @@
     st.mode = m;
     const painting = m === 'paint' || m === 'erase';
     document.body.classList.toggle('painting', painting);
+    document.body.classList.toggle('coloring', m === 'color');
+    $('bPaint').setAttribute('aria-pressed', String(m === 'color'));
+    if (m === 'color') renderPalette();
     scene.controls.enableRotate = !painting;
     if (m !== 'place' && m !== 'move') scene.setGhost(null);
     renderHint(); renderCards();
@@ -190,7 +209,64 @@
     toast(eul(nameOf(it)) + ' 지웠어요 · 되돌리기로 살릴 수 있어요');
   }
 
+  // ---------- rainbow paint
+  function renderPalette() {
+    const box = $('palette'); box.replaceChildren();
+    const sw = (ci, label) => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'sw' + (ci < 0 ? ' white' : '');
+      b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(st.color === ci));
+      b.setAttribute('aria-label', label); b.title = label;
+      if (ci >= 0) b.style.setProperty('--c', '#' + Models.PALETTE[ci].hex.toString(16).padStart(6, '0')); else b.textContent = '지우기';
+      b.addEventListener('click', () => { st.color = ci; renderPalette(); renderHint(); });
+      box.append(b);
+    };
+    Models.PALETTE.forEach((p, i) => sw(i, p.name));
+    sw(-1, '흰색 (색 지우기)');
+  }
+  function setPaint(it, idxs, ci) {
+    const p = { ...(it.paint || {}) };
+    idxs.forEach(i => { if (ci < 0) delete p[i]; else p[i] = ci; });
+    if (Object.keys(p).length) it.paint = p; else delete it.paint;
+  }
+  function paintTap(cx, cy, whole) {
+    const hit = scene.pickPart(cx, cy);
+    if (!hit) { toast('건물이나 나무의 면을 눌러 칠해요'); return; }
+    const it = v.items.find(i => i.id === hit.itemId); if (!it) return;
+    if (whole) {
+      // walls and roofs/leaves take the colour; windows stay light so the house still reads
+      const parts = scene.paintParts(it.id).filter(p => p.base !== 'win' || st.color < 0).map(p => p.idx);
+      h.commit(() => setPaint(it, parts, st.color));
+      changed(it.id);
+      toast(st.color < 0 ? eul(nameOf(it)) + ' 하얗게 되돌렸어요' : nameOf(it) + ' 통째로 칠했어요');
+    } else {
+      h.commit(() => setPaint(it, [hit.idx], st.color));
+      changed();
+    }
+  }
+  // stripes of the rainbow across the board; roofs one step further along, leaves in greens
+  function rainbowAll() {
+    const things = v.items.filter(i => i.kind !== 'road');
+    if (!things.length) { toast('칠할 건물이 없어요'); return; }
+    const n = Models.PALETTE.length;
+    const diag = it => (it.x + it.w / 2) - (it.z + it.d / 2);
+    const lo = Math.min(...things.map(diag)), hi = Math.max(...things.map(diag));
+    h.commit(() => things.forEach(it => {
+      const parts = scene.paintParts(it.id); if (!parts.length) return;
+      const band = Math.min(n - 1, Math.floor((diag(it) - lo) / (hi - lo + 1e-6) * n));
+      const p = {};
+      parts.forEach(({ idx, base }) => {
+        if (base === 'win') return;
+        if (it.kind === 'deco') { if (base === 'soft') p[idx] = (idx + it.id) % 2 ? 3 : 4; return; }
+        p[idx] = base === 'soft' ? (band + 1) % n : band;
+      });
+      if (Object.keys(p).length) it.paint = p; else delete it.paint;
+    }));
+    changed(); $('menuPop').hidden = true;
+    toast('🌈 마을을 무지개로 칠했어요 · 마음에 안 들면 되돌리기', true);
+  }
+
   function tap(cx, cy) {
+    if (st.mode === 'color') { paintTap(cx, cy, false); return; }
     const cell = scene.pickCell(cx, cy);
     if (st.mode === 'place') {
       if (!cell) return;
@@ -223,8 +299,14 @@
     if (st.mode === 'paint') { if (G.place(v, { kind: 'road', ref: 'road', x: cell[0], z: cell[1], rot: 0 })) scene.sync(v); }
     else { const it = G.itemAt(v, cell[0], cell[1]); if (it) { G.remove(v, it.id); scene.sync(v); } }
   }
+  let longT = null, longDone = false;
   canvas.addEventListener('pointerdown', e => {
     down = { x: e.clientX, y: e.clientY, id: e.pointerId, multi: down && down.id !== e.pointerId };
+    clearTimeout(longT); longDone = false;
+    if (st.mode === 'color' && !down.multi) {
+      const d0 = down;
+      longT = setTimeout(() => { if (down === d0 && !d0.moved) { longDone = true; paintTap(d0.x, d0.y, true); if (navigator.vibrate) try { navigator.vibrate(20); } catch (err) { /* ignore */ } } }, 520);
+    }
     if ((st.mode === 'paint' || st.mode === 'erase') && e.isPrimary) {
       stroke = { before: G.serialize(v), done: new Set() };
       canvas.setPointerCapture(e.pointerId);
@@ -232,15 +314,19 @@
     }
   });
   canvas.addEventListener('pointermove', e => {
+    if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) >= 7) down.moved = true;
     if (stroke) { paintAt(e.clientX, e.clientY); return; }
     if (e.pointerType === 'mouse' && (st.mode === 'place' || st.mode === 'move')) updateGhost(scene.pickCell(e.clientX, e.clientY));
   });
   canvas.addEventListener('pointerup', e => {
     if (stroke) { h.record(stroke.before); stroke = null; changed(); return; }
+    clearTimeout(longT);
+    if (longDone) { longDone = false; down = null; return; }
     if (down && !down.multi && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 7) tap(e.clientX, e.clientY);
     down = null;
   });
-  canvas.addEventListener('pointercancel', () => { if (stroke) { h.record(stroke.before); stroke = null; changed(); } down = null; });
+  canvas.addEventListener('contextmenu', e => { if (st.mode === 'color') e.preventDefault(); });
+  canvas.addEventListener('pointercancel', () => { clearTimeout(longT); if (stroke) { h.record(stroke.before); stroke = null; changed(); } down = null; });
   canvas.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && st.mode === 'place') scene.setGhost(null); });
 
   // ---------- fold the card row (phones: gives the board most of the screen)
@@ -308,6 +394,14 @@
     scene.grid.visible = true; scene.controls.autoRotate = false; scene.stopCars();
   }
   $('bView').addEventListener('click', enterView);
+  $('bPaint').addEventListener('click', () => { if (st.mode === 'color') cancel(); else { select(null, true); st.spec = null; setMode('color'); } });
+  $('bRainbow').addEventListener('click', rainbowAll);
+  $('bUnpaint').addEventListener('click', () => {
+    $('menuPop').hidden = true;
+    if (!painted()) { toast('칠한 색이 없어요'); return; }
+    h.commit(() => v.items.forEach(i => { delete i.paint; })); changed();
+    toast('색을 모두 지웠어요 · 되돌리기로 살릴 수 있어요');
+  });
   $('exitView').addEventListener('click', exitView);
 
   const pop = $('menuPop');
@@ -350,7 +444,8 @@
   function renderScore() {
     const el = $('spotScore'); el.replaceChildren();
     const total = spot.round.diffs.length;
-    el.append(`찾은 곳 ${spot.found.size} / ${total}`);
+    const w = document.createElement('span'); w.className = 'lbl-s'; w.textContent = '찾은 곳 ';
+    el.append(w, `${spot.found.size} / ${total}`);
     const dots = document.createElement('span'); dots.className = 'dots';
     spot.round.diffs.forEach(d => { const i = document.createElement('i'); if (spot.found.has(d)) i.className = 'on'; dots.append(i); });
     el.append(dots);

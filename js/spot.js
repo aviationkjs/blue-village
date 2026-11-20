@@ -53,6 +53,17 @@
         it.ref = ref;
         add({ type: 'swap', ids: [it.id], label: '다른 집으로 바뀌었어요' }, it); return true;
       },
+      recolor() {
+        const cand = things().filter(i => (i.kind === 'house' || i.kind === 'model') && clear(cellsOf(i)));
+        const it = pick(cand.filter(i => i.paint).length ? cand.filter(i => i.paint) : cand); if (!it) return false;
+        const p = it.paint = { ...(it.paint || {}) };
+        const keys = Object.keys(p);
+        const k = keys.length ? pick(keys) : '0';
+        let c = p[k];
+        while (c === p[k]) c = Math.floor(rand() * 8);
+        p[k] = c;
+        add({ type: 'recolor', ids: [it.id], label: '색이 바뀌었어요' }, it); return true;
+      },
       swapDeco() {
         const it = pick(things().filter(i => (i.ref === 'tree' || i.ref === 'roundTree') && clear(cellsOf(i)))); if (!it) return false;
         it.ref = it.ref === 'tree' ? 'roundTree' : 'tree';
@@ -60,6 +71,7 @@
       },
     };
     const names = ['remove', 'remove', 'add', 'add', 'rotate', 'swap', 'swap', 'swapDeco'];
+    if (v.items.some(i => i.paint)) names.push('recolor', 'recolor');
     for (let tries = 0; tries < 200 && diffs.length < count; tries++) ops[pick(names)]();
     return { village: b, diffs };
   }
