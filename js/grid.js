@@ -5,7 +5,7 @@
   function create(size = 24) { return { size, items: [], nextId: 1 }; }
 
   function footprint(kind, ref) {
-    if (kind === 'house') return [2, 2];
+    if (kind === 'house' || kind === 'statue') return [2, 2];
     if (kind === 'model') return (MODEL_FP[ref] || [2, 2]).slice();
     return [1, 1];
   }

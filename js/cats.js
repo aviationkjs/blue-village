@@ -8,6 +8,7 @@
     { id: 'country', name: '시골집', houses: [13, 14, 22, 24, 27, 29, 40] },
     { id: 'nature', name: '자연과 함께', houses: [7, 30, 35, 38, 45] },
     { id: 'special', name: '특별한 건물', houses: [23, 37, 44], models: ['tower', 'castle', 'cottage', 'tripleGable', 'greenhouse', 'storeBox'] },
+    { id: 'statue', name: '사진 동상', statues: true },
     { id: 'deco', name: '꾸미기', deco: ['road', 'tree', 'roundTree', 'bush', 'lamp', 'fence', 'erase'] },
   ];
   const api = { CATS };

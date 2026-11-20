@@ -12,7 +12,15 @@
     win: new THREE.MeshBasicMaterial({ color: DAY.win, ...off }),
     lamp: new THREE.MeshBasicMaterial({ color: DAY.lamp }),
     flag: new THREE.MeshBasicMaterial({ color: DAY.line, side: THREE.DoubleSide }),
+    glow: null, // lamp light pool on the ground, made below once a canvas exists
   };
+  (function () {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const x = c.getContext('2d'); const gr = x.createRadialGradient(64, 64, 0, 64, 64, 64);
+    gr.addColorStop(0, 'rgba(255,224,140,0.85)'); gr.addColorStop(0.45, 'rgba(255,214,120,0.35)'); gr.addColorStop(1, 'rgba(255,210,110,0)');
+    x.fillStyle = gr; x.fillRect(0, 0, 128, 128);
+    M.glow = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
+  })();
 
   function part(geo, parent, x = 0, y = 0, z = 0, mat = M.fill) {
     const g = new THREE.Group();
@@ -212,6 +220,9 @@
       bar(g, 0.06, 1.2, 0.06, 0, 0.6, 0);
       const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 8), M.lamp); bulb.position.y = 1.28; g.add(bulb);
       const e = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.SphereGeometry(0.12, 6, 4)), M.line); e.position.y = 1.28; g.add(e);
+      // light pool on the ground at night (not tappable: flagged like smoke so picking skips it)
+      const pool = new THREE.Mesh(new THREE.CircleGeometry(1.25, 32), M.glow);
+      pool.rotation.x = -Math.PI / 2; pool.position.y = 0.03; pool.renderOrder = 2; pool.userData.smoke = true; g.add(pool);
       return g;
     },
     fence: () => {
@@ -248,7 +259,8 @@
   const paintMats = {};
   let paintNightT = 0;
   function paintNightColor(day, base) {
-    return base === 'win' ? day.clone().lerp(NIGHT.win, 0.55) : day.clone().multiplyScalar(0.62).lerp(NIGHT.fill, 0.2);
+    // painted windows keep their own colour and glow at night; walls and roofs darken
+    return base === 'win' ? day.clone().lerp(new THREE.Color(0xffffff), 0.2) : day.clone().multiplyScalar(0.62).lerp(NIGHT.fill, 0.2);
   }
   function paintMat(ci, base) {
     const key = ci + ':' + base;
@@ -262,10 +274,38 @@
   }
   function setPaintNight(t) {
     paintNightT = t;
+    M.glow.opacity = t;
     Object.values(paintMats).forEach(p => p.mat.color.copy(p.day).lerp(p.night, t));
   }
   // which shared material a mesh started with decides whether (and how) it can be painted
   function paintBaseOf(mat) { return mat === M.fill ? 'fill' : mat === M.soft ? 'soft' : mat === M.win ? 'win' : null; }
 
-  root.BV.Models = { PALETTE, HUE_NAMES, code, colorHex, colorName, validColor, paintMat, setPaintNight, paintBaseOf, DAY, NIGHT, M, part, box, bar, gable, hipRoof, windowOn, leaf, addSmoke, model, deco, NAMES, DECO_NAMES, MODEL_REFS: Object.keys(NAMES), DECO_REFS: Object.keys(DECO) };
+  // ---- photo statue: pedestal + board, with the line drawing on both faces (lines follow the blue line colour)
+  const statueTex = {};
+  function statue(ref, rec) {
+    const g = new THREE.Group();
+    part(box(1.3, 0.28, 1.3), g, 0, 0.14, 0);
+    part(box(1.0, 0.14, 1.0), g, 0, 0.35, 0, M.soft);
+    if (!rec) return g;
+    const aspect = rec.w / rec.h;
+    let H = 1.5, W = H * aspect;
+    if (W > 1.8) { W = 1.8; H = W / aspect; }
+    const y = 0.42 + H / 2 + 0.06;
+    part(box(W + 0.14, H + 0.14, 0.06), g, 0, y, 0);
+    let tex = statueTex[ref];
+    if (!tex) {
+      tex = statueTex[ref] = new THREE.Texture();
+      const im = new Image(); im.onload = () => { tex.image = im; tex.needsUpdate = true; }; im.src = rec.mask;
+    }
+    const mat = new THREE.MeshBasicMaterial({ alphaMap: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+    mat.color = M.flag.color; // shared colour object: day/night changes reach the statue too
+    [0.036, -0.036].forEach((z, i) => {
+      const pl = new THREE.Mesh(new THREE.PlaneGeometry(W, H), mat);
+      pl.position.set(0, y, z); if (i) pl.rotation.y = Math.PI; g.add(pl);
+    });
+    g.scale.setScalar(1.25);
+    return g;
+  }
+
+  root.BV.Models = { statue, PALETTE, HUE_NAMES, code, colorHex, colorName, validColor, paintMat, setPaintNight, paintBaseOf, DAY, NIGHT, M, part, box, bar, gable, hipRoof, windowOn, leaf, addSmoke, model, deco, NAMES, DECO_NAMES, MODEL_REFS: Object.keys(NAMES), DECO_REFS: Object.keys(DECO) };
 })(this);

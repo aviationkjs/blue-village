@@ -189,6 +189,31 @@
     .pick { width: 54px; height: 60px; }
     .pick img { width: 38px; height: 38px; }
   }
+
+  /* dialogs: village list, wallpaper, photo statue */
+  .dlg { position: fixed; inset: 0; z-index: 25; background: rgba(13, 23, 48, 0.35); display: grid; place-items: center; padding: max(12px, env(safe-area-inset-top, 0px)) 12px max(12px, env(safe-area-inset-bottom, 0px)); }
+  .dlg-box { box-sizing: border-box; width: min(440px, 100%); max-height: 100%; overflow-y: auto; background: var(--paper); border: 2px solid var(--blue); border-radius: 18px; padding: 12px; display: grid; gap: 10px; }
+  .dlg-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .dlg-head h2 { margin: 0; font: 400 20px var(--font-display); color: var(--blue); }
+  .dlg-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .dlg-row .gap { flex: 1; }
+  .note { color: var(--ink); opacity: .75; font-size: 13px; line-height: 1.45; }
+  .slot-list { display: grid; gap: 8px; }
+  .slot { display: grid; grid-template-columns: 84px 1fr auto; gap: 8px; align-items: center; border: 2px solid var(--blue-soft); border-radius: 14px; padding: 6px; background: var(--card); }
+  .slot.is-cur { border-color: var(--blue); }
+  .slot img { width: 84px; height: 60px; object-fit: cover; border-radius: 10px; background: var(--blue-soft); }
+  .slot-mid { display: grid; gap: 2px; min-width: 0; }
+  .slot-mid input { font: 400 16px var(--font-display); color: var(--ink); background: transparent; border: 0; border-bottom: 1.5px dashed var(--blue-soft); padding: 2px 0; min-width: 0; width: 100%; }
+  .slot-mid small { font-size: 12px; opacity: .7; }
+  .slot-acts { display: grid; gap: 4px; }
+  .slot-acts button { padding: 4px 10px; font-size: 13px; }
+  .wall-img { width: 100%; max-height: 52vh; object-fit: contain; border-radius: 12px; border: 2px solid var(--blue-soft); background: var(--blue-soft); }
+  .file-btn { justify-self: start; font: 400 15px var(--font-display); color: var(--paper); background: var(--blue); border-radius: 999px; padding: 8px 16px; cursor: pointer; }
+  .file-btn input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .photo-prev { width: 100%; max-height: 42vh; object-fit: contain; border-radius: 12px; border: 2px solid var(--blue-soft); background: #fff; }
+  .photo-prev[width="0"] { display: none; }
+  .slider { display: flex; align-items: center; gap: 8px; font: 400 15px var(--font-display); color: var(--blue); }
+  .slider input { flex: 1; accent-color: var(--blue); }
   @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
 </style>
 
@@ -210,6 +235,8 @@
     <div class="menu">
       <button id="bMenu" class="ib" type="button" aria-expanded="false" aria-controls="menuPop" aria-label="더 보기" title="더 보기"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg></button>
       <div class="menu-pop" id="menuPop" hidden>
+        <button id="bSlots" type="button">마을 목록 (여러 마을 저장)</button>
+        <button id="bWall" type="button">배경화면 저장</button>
         <button id="bRainbow" type="button">무지개 자동 칠하기</button>
         <button id="bUnpaint" type="button">색 모두 지우기</button>
         <button id="bExample" type="button">예시 마을 다시 짓기</button>
@@ -247,6 +274,36 @@
   </div>
 </div>
 
+
+<div id="slotDlg" class="dlg" hidden role="dialog" aria-modal="true" aria-labelledby="slotTitle">
+  <div class="dlg-box">
+    <div class="dlg-head"><h2 id="slotTitle">마을 목록</h2><button type="button" data-close="slotDlg">닫기</button></div>
+    <div id="slotList" class="slot-list"></div>
+    <div class="dlg-row"><button id="slotNew" type="button">+ 빈 마을</button><button id="slotExample" type="button">+ 예시 마을</button><button id="slotCopy" type="button">지금 마을 복사</button></div>
+  </div>
+</div>
+
+<div id="wallDlg" class="dlg" hidden role="dialog" aria-modal="true" aria-labelledby="wallTitle">
+  <div class="dlg-box">
+    <div class="dlg-head"><h2 id="wallTitle">배경화면 저장</h2><button type="button" data-close="wallDlg">닫기</button></div>
+    <div class="dlg-row seg2"><button id="wallDay" type="button">낮</button><button id="wallNight" type="button">밤</button><span class="gap"></span><button id="wallPort" type="button">세로</button><button id="wallLand" type="button">가로</button></div>
+    <img id="wallImg" class="wall-img" alt="배경화면 미리보기">
+    <small id="wallInfo" class="note"></small>
+    <div class="dlg-row"><button id="wallSave" type="button" class="primary">사진으로 저장</button><button id="wallShare" type="button">공유 · 배경화면 설정</button></div>
+  </div>
+</div>
+
+<div id="photoDlg" class="dlg" hidden role="dialog" aria-modal="true" aria-labelledby="photoTitle">
+  <div class="dlg-box">
+    <div class="dlg-head"><h2 id="photoTitle">사진으로 동상 만들기</h2><button type="button" data-close="photoDlg">닫기</button></div>
+    <label class="file-btn">사진 고르기<input id="photoFile" type="file" accept="image/*"></label>
+    <canvas id="photoPrev" class="photo-prev" width="0" height="0"></canvas>
+    <label class="slider">선 세밀함 <input id="photoDetail" type="range" min="0" max="100" value="45"></label>
+    <small class="note">사진은 이 기기 안에서만 선 그림으로 바뀌고 어디에도 올라가지 않아요. 배경이 단순할수록 깔끔해요.</small>
+    <div class="dlg-row"><button id="photoMake" type="button" class="primary" disabled>동상 만들기</button></div>
+  </div>
+</div>
+
 <div id="toast"></div>
 <div id="loading">마을을 준비하는 중…</div>
 
@@ -260,6 +317,7 @@
 <script src="js/sheet.js"></script>
 <script src="js/models3d.js"></script>
 <script src="js/house3d.js"></script>
+<script src="js/photo.js"></script>
 <script src="js/scene.js"></script>
 <script src="js/main.js"></script>
 

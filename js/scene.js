@@ -79,6 +79,7 @@
     function buildObject(it) {
       if (it.kind === 'house') return root.BV.House3D.build(it.ref);
       if (it.kind === 'model') return Models.model(it.ref);
+      if (it.kind === 'statue') return Models.statue(it.ref, root.BV.Statues ? root.BV.Statues.get(it.ref) : null);
       return Models.deco(it.ref);
     }
     const worldX = it => it.x + it.w / 2 - HALF, worldZ = it => it.z + it.d / 2 - HALF;
@@ -302,6 +303,24 @@
     }
     function clearMarkers() { markers.clear(); }
 
+    // ---- still picture of the current view at any size (wallpaper, village list thumbnails)
+    function capture(w, h, o = {}) {
+      const prevNight = night, hidden = [grid, sel, selPad, pad, markers, ghost].filter(x => x && x.visible);
+      hidden.forEach(x => { x.visible = false; });
+      if (o.night !== undefined) setNight(o.night);
+      renderer.setPixelRatio(1);
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h; camera.fov = o.fov || (w / h < 0.8 ? 62 : 45); camera.clearViewOffset(); camera.updateProjectionMatrix();
+      renderer.render(scene, camera);
+      const url = renderer.domElement.toDataURL(o.type || 'image/png', o.quality || 0.92);
+      hidden.forEach(x => { x.visible = true; });
+      if (o.night !== undefined) setNight(prevNight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      resize();
+      renderer.render(scene, camera);
+      return url;
+    }
+
     // ---- thumbnails for the drawer
     let thumbR = null;
     function thumbnail(kind, ref) {
@@ -347,7 +366,7 @@
 
     const clock = new THREE.Clock();
     if (opts.grid === false) grid.visible = false;
-    const api = { renderer, scene, camera, controls, sync, setGhost, setSelected, pickCell, pickItemId, pickPart, paintParts, hitsGround, setNight, startCars, stopCars, thumbnail, addMarker, clearMarkers, resize, setInsets, grid, paused: false, get night() { return night; }, onFrame: null };
+    const api = { renderer, scene, camera, controls, sync, setGhost, setSelected, pickCell, pickItemId, pickPart, paintParts, hitsGround, capture, setNight, startCars, stopCars, thumbnail, addMarker, clearMarkers, resize, setInsets, grid, paused: false, get night() { return night; }, onFrame: null };
     (function tick() {
       requestAnimationFrame(tick);
       if (api.paused) { clock.getDelta(); return; }

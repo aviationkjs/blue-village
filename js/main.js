@@ -1,7 +1,9 @@
 // Wires the village state, the scene and the on-screen controls together.
 (function () {
   const { Grid: G, Roads: R, Decorate: D, Spot, Cats, Sheet, Models, Scene } = window.BV;
-  const KEY = 'bv-village-v1';
+  // villages: one storage key per village; the first village keeps the original key
+  const SLOTS = 'bv-slots', CUR = 'bv-slot-cur';
+  const keyOf = id => id === 'v1' ? 'bv-village-v1' : 'bv-village-' + id;
   const $ = id => document.getElementById(id);
 
   const store = {
@@ -28,7 +30,14 @@
   }
 
   let houses = [];
-  let v = G.deserialize(store.get(KEY) || '') || exampleVillage();
+  (function migrate() {
+    let a; try { a = JSON.parse(store.get(SLOTS) || 'null'); } catch (e) { a = null; }
+    if (!Array.isArray(a) || !a.length) store.set(SLOTS, JSON.stringify([{ id: 'v1', name: '내 마을', t: Date.now() }]));
+  })();
+  let curSlot = store.get(CUR) || 'v1';
+  if (!JSON.parse(store.get(SLOTS) || '[]').some(x => x.id === curSlot)) curSlot = (JSON.parse(store.get(SLOTS) || '[]')[0] || { id: 'v1' }).id;
+  let curKey = keyOf(curSlot);
+  let v = G.deserialize(store.get(curKey) || '') || exampleVillage();
   const h = new G.History(v);
 
   // mode: idle | place | paint | erase | move
@@ -46,7 +55,7 @@
     if (wasRainbow === false && r) toast('🌈 무지개 마을이 되었어요!', true);
     wasRainbow = r;
   }
-  const nameOf = it => it.kind === 'house' ? '집 ' + (+it.ref + 1) : it.kind === 'model' ? Models.NAMES[it.ref] : it.kind === 'road' ? '길' : (Models.DECO_NAMES[it.ref] || '꾸미기');
+  const nameOf = it => it.kind === 'statue' ? '동상' : it.kind === 'house' ? '집 ' + (+it.ref + 1) : it.kind === 'model' ? Models.NAMES[it.ref] : it.kind === 'road' ? '길' : (Models.DECO_NAMES[it.ref] || '꾸미기');
   const selItem = () => v.items.find(i => i.id === st.sel) || null;
 
   let toastTimer;
@@ -56,7 +65,7 @@
   }
 
   function changed(popId) {
-    store.set(KEY, G.serialize(v));
+    store.set(curKey, G.serialize(v)); touchSlot();
     if (st.sel && !selItem()) st.sel = null;
     scene.sync(v, popId);
     scene.setSelected(selItem());
@@ -107,6 +116,7 @@
   function svgIcon(body) { return 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" stroke="#3f7fe8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`); }
   const ICONS = {
     road: svgIcon('<rect x="8" y="22" width="48" height="20" rx="3" fill="#d0defa"/><path d="M14 32h8M28 32h8M42 32h8"/>'),
+    camera: svgIcon('<rect x="8" y="18" width="48" height="34" rx="6" fill="#fff"/><circle cx="32" cy="35" r="10"/><path d="M22 18l4-6h12l4 6"/><path d="M44 12l4 4M44 16l4-4" stroke-width="2"/>'),
     erase: svgIcon('<path d="M14 44l18-24 16 12-12 16H20z" fill="#fff"/><path d="M22 34l12 9M12 52h40"/>'),
   };
   const thumb = (kind, ref) => thumbs[kind + ':' + ref] || (thumbs[kind + ':' + ref] = scene.thumbnail(kind, ref));
@@ -114,6 +124,10 @@
     const c = Cats.CATS.find(x => x.id === cat) || Cats.CATS[0];
     const out = [];
     (c.houses || []).forEach(i => out.push({ kind: 'house', ref: String(i), name: '집 ' + (i + 1), img: houses[i] ? houses[i].thumb : thumb('house', String(i)) }));
+    if (c.statues) {
+      out.push({ kind: 'photo', ref: 'photo', name: '사진으로', img: ICONS.camera });
+      BV.Statues.list().forEach(([id, rec]) => out.push({ kind: 'statue', ref: id, name: '동상', img: rec.preview }));
+    }
     (c.models || []).forEach(r => out.push({ kind: 'model', ref: r, name: Models.NAMES[r], img: thumb('model', r) }));
     (c.deco || []).forEach(r => out.push(r === 'road' ? { kind: 'road', ref: 'road', name: '길', img: ICONS.road }
       : r === 'erase' ? { kind: 'erase', ref: 'erase', name: '지우개', img: ICONS.erase }
@@ -123,7 +137,7 @@
   function renderTabs() {
     const box = $('tabs'); box.replaceChildren();
     Cats.CATS.forEach(c => {
-      const n = (c.houses || []).length + (c.models || []).length + (c.deco || []).length;
+      const n = (c.houses || []).length + (c.models || []).length + (c.deco || []).length + (c.statues ? BV.Statues.list().length : 0);
       const b = btn(c.name, () => { st.cat = c.id; setFold(false); renderTabs(); renderCards(); $('cards').scrollLeft = 0; });
       b.setAttribute('role', 'tab');
       b.setAttribute('aria-pressed', String(st.cat === c.id));
@@ -153,6 +167,7 @@
     const same = isActive(c);
     select(null, true);
     if (same) { cancel(); return; }
+    if (c.kind === 'photo') { cancel(); openPhoto(); return; }
     if (c.kind === 'road') setMode('paint');
     else if (c.kind === 'erase') setMode('erase');
     else { st.spec = { kind: c.kind, ref: c.ref, rot: 0 }; setMode('place'); }
@@ -568,6 +583,159 @@
     toast('예시 마을을 다시 지었어요');
   });
 
+
+  // ================= village list (several saved villages) =================
+  function slotList() { try { const a = JSON.parse(store.get(SLOTS) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+  function saveSlots(a) { store.set(SLOTS, JSON.stringify(a)); }
+  function touchSlot() {
+    const a = slotList(); const s = a.find(x => x.id === curSlot);
+    if (s) { s.t = Date.now(); saveSlots(a); }
+  }
+  function slotThumb() {
+    try { return scene.capture(240, 170, { type: 'image/jpeg', quality: 0.7, fov: 30 }); } catch (e) { return ''; }
+  }
+  function saveThumb() {
+    const a = slotList(); const s = a.find(x => x.id === curSlot);
+    if (s) { s.thumb = slotThumb(); s.t = Date.now(); saveSlots(a); }
+  }
+  function loadInto(o) {
+    v.items = o.items; v.nextId = o.nextId; v.size = o.size;
+    if (o.floor) v.floor = o.floor; else delete v.floor;
+    if (o.ground !== undefined) v.ground = o.ground; else delete v.ground;
+  }
+  function openSlot(id) {
+    if (id === curSlot) { closeDlg('slotDlg'); return; }
+    saveThumb();
+    const o = G.deserialize(store.get(keyOf(id)) || '') || G.create();
+    exitView(); cancel(); select(null);
+    loadInto(o); h.reset();
+    curSlot = id; curKey = keyOf(id); store.set(CUR, id);
+    wasRainbow = null; changed(); renderHint();
+    closeDlg('slotDlg');
+    const s = slotList().find(x => x.id === id);
+    toast(`'${s ? s.name : '마을'}'을 열었어요`);
+  }
+  function newSlot(kind) {
+    const a = slotList();
+    if (a.length >= 12) { toast('마을은 12개까지 저장할 수 있어요. 안 쓰는 마을을 지워 주세요'); return; }
+    const id = 'm' + Date.now().toString(36);
+    const o = kind === 'example' ? exampleVillage() : kind === 'copy' ? G.deserialize(G.serialize(v)) : G.create();
+    const base = kind === 'copy' ? ((a.find(x => x.id === curSlot) || {}).name || '마을') + ' 복사' : kind === 'example' ? '예시 마을' : '새 마을';
+    store.set(keyOf(id), G.serialize(o));
+    a.push({ id, name: base + ' ' + (a.length + 1), t: Date.now() });
+    saveSlots(a);
+    openSlot(id);
+  }
+  function renderSlots() {
+    const box = $('slotList'); box.replaceChildren();
+    const a = slotList().sort((x, y) => (y.t || 0) - (x.t || 0));
+    a.forEach(s => {
+      const row = document.createElement('div'); row.className = 'slot' + (s.id === curSlot ? ' is-cur' : '');
+      const img = document.createElement('img'); img.alt = ''; if (s.thumb) img.src = s.thumb;
+      const mid = document.createElement('div'); mid.className = 'slot-mid';
+      const nm = document.createElement('input'); nm.type = 'text'; nm.value = s.name; nm.maxLength = 20; nm.setAttribute('aria-label', '마을 이름');
+      nm.addEventListener('change', () => { const b = slotList(); const t = b.find(x => x.id === s.id); if (t) { t.name = nm.value.trim() || t.name; saveSlots(b); } });
+      const when = document.createElement('small');
+      when.textContent = (s.id === curSlot ? '지금 마을 · ' : '') + (s.t ? new Date(s.t).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '');
+      mid.append(nm, when);
+      const acts = document.createElement('div'); acts.className = 'slot-acts';
+      if (s.id !== curSlot) acts.append(btn('열기', () => openSlot(s.id), 'primary'));
+      const del = btn('지우기', () => {
+        if (del.dataset.armed !== '1') { del.dataset.armed = '1'; del.textContent = '정말?'; setTimeout(() => { del.dataset.armed = ''; del.textContent = '지우기'; }, 2500); return; }
+        const b = slotList().filter(x => x.id !== s.id); saveSlots(b);
+        try { localStorage.removeItem(keyOf(s.id)); } catch (e) { /* ignore */ }
+        renderSlots(); toast(`'${s.name}'을 지웠어요`);
+      }, 'danger');
+      if (s.id !== curSlot) acts.append(del);
+      row.append(img, mid, acts); box.append(row);
+    });
+  }
+  $('bSlots').addEventListener('click', () => { pop.hidden = true; saveThumb(); renderSlots(); openDlg('slotDlg'); });
+  $('slotNew').addEventListener('click', () => newSlot('empty'));
+  $('slotExample').addEventListener('click', () => newSlot('example'));
+  $('slotCopy').addEventListener('click', () => newSlot('copy'));
+
+  // ================= wallpaper =================
+  const wall = { night: false, land: false, url: '' };
+  function wallSize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 3);
+    let w = Math.round(Math.min(screen.width, screen.height) * dpr), hh = Math.round(Math.max(screen.width, screen.height) * dpr);
+    const k = Math.min(1, 2400 / hh); w = Math.round(w * k); hh = Math.round(hh * k);
+    return wall.land ? [hh, w] : [w, hh];
+  }
+  function renderWall() {
+    const [w, hh] = wallSize();
+    wall.url = scene.capture(w, hh, { night: wall.night ? 1 : 0 });
+    $('wallImg').src = wall.url;
+    $('wallInfo').textContent = `${w} × ${hh} · 지금 보이는 각도 그대로예요. 각도를 바꾸려면 닫고 화면을 돌린 뒤 다시 여세요`;
+    $('wallDay').setAttribute('aria-pressed', String(!wall.night)); $('wallNight').setAttribute('aria-pressed', String(wall.night));
+    $('wallPort').setAttribute('aria-pressed', String(!wall.land)); $('wallLand').setAttribute('aria-pressed', String(wall.land));
+  }
+  const fileName = () => (painted() ? '무지개마을' : '파란선마을') + '-배경화면-' + new Date().toISOString().slice(0, 10) + '.png';
+  async function wallBlob() { return (await fetch(wall.url)).blob(); }
+  $('bWall').addEventListener('click', () => {
+    pop.hidden = true; exitView(); cancel(); select(null);
+    wall.night = scene.night > 0.5; openDlg('wallDlg'); renderWall();
+  });
+  $('wallDay').addEventListener('click', () => { wall.night = false; renderWall(); });
+  $('wallNight').addEventListener('click', () => { wall.night = true; renderWall(); });
+  $('wallPort').addEventListener('click', () => { wall.land = false; renderWall(); });
+  $('wallLand').addEventListener('click', () => { wall.land = true; renderWall(); });
+  const framed = (() => { try { return window.self !== window.top; } catch (e) { return true; } })();
+  $('wallSave').addEventListener('click', () => {
+    if (framed) { toast('이 화면에서는 저장이 막혀 있어요. 휴대폰에 설치한 앱에서 저장해 주세요'); return; }
+    try {
+      const a = document.createElement('a'); a.href = wall.url; a.download = fileName();
+      document.body.append(a); a.click(); a.remove();
+      toast('사진을 저장했어요 · 갤러리에서 배경화면으로 설정하세요');
+    } catch (e) { toast('여기서는 저장이 막혀 있어요. 이미지를 길게 눌러 저장해 보세요'); }
+  });
+  $('wallShare').addEventListener('click', async () => {
+    try {
+      const file = new File([await wallBlob()], fileName(), { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ files: [file], title: '마을 배경화면' });
+      else toast('공유를 쓸 수 없어요. 저장 버튼을 눌러 주세요');
+    } catch (e) { /* closed the share sheet */ }
+  });
+  $('wallShare').hidden = !(navigator.canShare && window.File);
+
+  // ================= photo statue =================
+  let photoImg = null, photoArt = null;
+  function renderPhoto() {
+    if (!photoImg) return;
+    photoArt = BV.Photo.toLineArt(photoImg, +$('photoDetail').value / 100);
+    const cv = $('photoPrev'); cv.width = photoArt.w; cv.height = photoArt.h;
+    cv.getContext('2d').drawImage(photoArt.preview, 0, 0);
+    $('photoMake').disabled = false;
+  }
+  function openPhoto() { photoImg = null; photoArt = null; $('photoMake').disabled = true; $('photoPrev').width = 0; $('photoFile').value = ''; openDlg('photoDlg'); }
+  $('photoFile').addEventListener('change', () => {
+    const f = $('photoFile').files[0]; if (!f) return;
+    const url = URL.createObjectURL(f);
+    const im = new Image();
+    im.onload = () => { photoImg = im; renderPhoto(); URL.revokeObjectURL(url); };
+    im.onerror = () => toast('이 사진은 열 수 없어요. 다른 사진을 골라 주세요');
+    im.src = url;
+  });
+  $('photoDetail').addEventListener('input', () => { clearTimeout(renderPhoto.t); renderPhoto.t = setTimeout(renderPhoto, 120); });
+  $('photoMake').addEventListener('click', () => {
+    if (!photoArt) return;
+    const small = document.createElement('canvas'); const k = 96 / Math.max(photoArt.w, photoArt.h);
+    small.width = Math.round(photoArt.w * k); small.height = Math.round(photoArt.h * k);
+    small.getContext('2d').drawImage(photoArt.preview, 0, 0, small.width, small.height);
+    const id = BV.Statues.add({ mask: photoArt.mask.toDataURL('image/png'), preview: small.toDataURL('image/png'), w: photoArt.w, h: photoArt.h });
+    if (!id) { toast('저장 공간이 모자라요. 안 쓰는 동상이나 마을을 지워 주세요'); return; }
+    closeDlg('photoDlg');
+    st.cat = 'statue'; renderTabs(); renderCards();
+    st.spec = { kind: 'statue', ref: id, rot: 0 }; setMode('place');
+    toast('동상을 만들었어요 · 놓을 칸을 누르세요', true);
+  });
+
+  // ================= dialogs =================
+  function openDlg(id) { $(id).hidden = false; }
+  function closeDlg(id) { $(id).hidden = true; }
+  document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => closeDlg(b.dataset.close)));
+
   // ---------- spot the difference
   const spot = { a: null, b: null, round: null, found: new Set(), lastSeed: 0, open: false };
   function copyCam(from, to) {
@@ -654,6 +822,9 @@
   window.addEventListener('resize', () => { if (spot.open) { spot.a.resize(); spot.b.resize(); } });
 
   document.addEventListener('keydown', e => {
+    if (e.target.closest && e.target.closest('input, textarea')) return;
+    const open = document.querySelector('.dlg:not([hidden])');
+    if (open) { if (e.key === 'Escape') open.hidden = true; return; }
     const k = e.key.toLowerCase();
     if (spot.open) { if (k === 'escape') closeSpot(); return; }
     if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
