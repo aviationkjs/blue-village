@@ -1,6 +1,15 @@
 // Village state: what sits on which cell. No rendering here.
 (function (root) {
-  const MODEL_FP = { fountain: [2, 2], pond: [2, 2], bridge: [2, 1], playground: [3, 2], cottage: [3, 2], greenhouse: [2, 2], tower: [3, 3], storeBox: [2, 2], tripleGable: [3, 2], castle: [3, 2] };
+  const MODEL_FP = {
+    fountain: [2, 2], pond: [2, 2], bridge: [2, 1], playground: [3, 2], cottage: [3, 2], greenhouse: [2, 2], tower: [3, 3], storeBox: [2, 2], tripleGable: [3, 2], castle: [3, 2],
+    // landmarks
+    windmill: [2, 2], lighthouse: [2, 2], clockTower: [2, 2], ferrisWheel: [3, 2], waterwheel: [3, 2], observatory: [3, 3],
+    station: [3, 2], treehouse: [2, 2], pavilion: [2, 2], church: [2, 3], balloon: [2, 2], gate: [3, 1],
+    // shops
+    bakery: [2, 2], flowerShop: [2, 2], cafe: [2, 2], bookstore: [2, 2], postOffice: [2, 2], iceCream: [2, 2], market: [3, 2], library: [3, 2],
+    // nature, farm, resting places
+    waterfall: [2, 2], field: [2, 2], hill: [2, 2], hammock: [2, 1], tent: [2, 2], footbath: [2, 2], clothesline: [2, 1],
+  };
 
   function create(size = 24) { return { size, items: [], nextId: 1 }; }
 

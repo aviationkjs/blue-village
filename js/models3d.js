@@ -281,8 +281,11 @@
     inner.scale.setScalar(SCALE[ref] || 0.6);
     const g = new THREE.Group(); g.add(inner);
     g.userData.tick = inner.userData.tick;
+    g.userData.react = inner.userData.react;
     return g;
   }
+  // more buildings come from landmarks.js / nature.js: built in grid units (1 = one cell), front faces +z
+  function register(ref, name, builder, scale = 1) { B[ref] = builder; SCALE[ref] = scale; NAMES[ref] = name; }
 
   // decorations: 1x1 cell
   const DECO = {
@@ -327,6 +330,7 @@
   };
   const DECO_NAMES = { bench: '벤치', flowers: '꽃밭', tree: '뾰족 나무', roundTree: '둥근 나무', bush: '덤불', lamp: '가로등', fence: '울타리' };
   function deco(ref) { return (DECO[ref] || DECO.tree)(); }
+  function registerDeco(ref, name, builder) { DECO[ref] = builder; DECO_NAMES[ref] = name; }
 
   root.BV = root.BV || {};
   // ---- rainbow paint: one shared material per colour and surface kind, darkened at night like the rest
@@ -400,5 +404,5 @@
     return g;
   }
 
-  root.BV.Models = { statue, PALETTE, HUE_NAMES, code, colorHex, colorName, validColor, paintMat, setPaintNight, paintBaseOf, DAY, NIGHT, M, part, box, bar, gable, hipRoof, windowOn, leaf, addSmoke, model, deco, NAMES, DECO_NAMES, MODEL_REFS: Object.keys(NAMES), DECO_REFS: Object.keys(DECO) };
+  root.BV.Models = { statue, PALETTE, HUE_NAMES, code, colorHex, colorName, validColor, paintMat, setPaintNight, paintBaseOf, DAY, NIGHT, M, part, box, bar, gable, hipRoof, windowOn, leaf, addSmoke, model, deco, register, registerDeco, NAMES, DECO_NAMES, get MODEL_REFS() { return Object.keys(NAMES); }, get DECO_REFS() { return Object.keys(DECO); } };
 })(this);

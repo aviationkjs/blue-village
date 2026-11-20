@@ -71,7 +71,8 @@
     if (wasRainbow === false && r) toast('🌈 무지개 마을이 되었어요!', true);
     wasRainbow = r;
   }
-  const nameOf = it => it.kind === 'statue' ? '동상' : it.kind === 'house' ? '집 ' + (+it.ref + 1) : it.kind === 'model' ? Models.NAMES[it.ref] : it.kind === 'road' ? '길' : (Models.DECO_NAMES[it.ref] || '꾸미기');
+  const TILE_NAMES = { road: '길', water: '개울', rail: '기찻길' };
+  const nameOf = it => it.kind === 'statue' ? '동상' : it.kind === 'house' ? '집 ' + (+it.ref + 1) : it.kind === 'model' ? Models.NAMES[it.ref] : it.kind === 'road' ? (TILE_NAMES[it.ref] || '길') : (Models.DECO_NAMES[it.ref] || '꾸미기');
   const selItem = () => v.items.find(i => i.id === st.sel) || null;
 
   let toastTimer;
@@ -109,7 +110,7 @@
       }
       el.append(btn('🌈 자동', rainbowAll), btn('그만', cancel));
     } else if (st.mode === 'paint') {
-      text.append(strong('길'), ' 칸을 누르거나 끌어서 깔아요');
+      text.append(strong(TILE_NAMES[st.tile] || '길'), ' 칸을 누르거나 끌어서 깔아요');
       el.append(btn('그만', cancel));
     } else if (st.mode === 'erase') {
       text.append(strong('지우개'), ' 누르거나 끌어서 지워요');
@@ -132,6 +133,8 @@
   function svgIcon(body) { return 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" stroke="#3f7fe8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`); }
   const ICONS = {
     road: svgIcon('<rect x="8" y="22" width="48" height="20" rx="3" fill="#d0defa"/><path d="M14 32h8M28 32h8M42 32h8"/>'),
+    water: svgIcon('<path d="M6 26c8-6 14 6 22 0s14 6 22 0 8-2 8-2v18H6z" fill="#bcd7ff"/><path d="M12 34c5-3 8 3 13 0M34 38c5-3 8 3 13 0" stroke-width="2.5"/>'),
+    rail: svgIcon('<rect x="8" y="22" width="48" height="20" rx="3" fill="#dfe5f1"/><path d="M14 20v24M24 20v24M34 20v24M44 20v24" stroke="#c9a27a" stroke-width="4"/><path d="M8 27h48M8 37h48"/>'),
     camera: svgIcon('<rect x="8" y="18" width="48" height="34" rx="6" fill="#fff"/><circle cx="32" cy="35" r="10"/><path d="M22 18l4-6h12l4 6"/><path d="M44 12l4 4M44 16l4-4" stroke-width="2"/>'),
     erase: svgIcon('<path d="M14 44l18-24 16 12-12 16H20z" fill="#fff"/><path d="M22 34l12 9M12 52h40"/>'),
   };
@@ -145,7 +148,7 @@
       Statues.list().forEach(([id, rec]) => out.push({ kind: 'statue', ref: id, name: '동상', img: rec.preview }));
     }
     (c.models || []).forEach(r => out.push({ kind: 'model', ref: r, name: Models.NAMES[r], img: thumb('model', r) }));
-    (c.deco || []).forEach(r => out.push(r === 'road' ? { kind: 'road', ref: 'road', name: '길', img: ICONS.road }
+    (c.deco || []).forEach(r => out.push(TILE_NAMES[r] ? { kind: 'road', ref: r, name: TILE_NAMES[r], img: ICONS[r] }
       : r === 'erase' ? { kind: 'erase', ref: 'erase', name: '지우개', img: ICONS.erase }
         : { kind: 'deco', ref: r, name: Models.DECO_NAMES[r], img: thumb('deco', r) }));
     return out;
@@ -164,7 +167,7 @@
   }
   function isActive(c) {
     return (st.mode === 'place' && st.spec && st.spec.kind === c.kind && st.spec.ref === c.ref) ||
-      (st.mode === 'paint' && c.kind === 'road') || (st.mode === 'erase' && c.kind === 'erase');
+      (st.mode === 'paint' && c.kind === 'road' && c.ref === st.tile) || (st.mode === 'erase' && c.kind === 'erase');
   }
   function renderCards() {
     const box = $('cards'); box.replaceChildren();
@@ -209,7 +212,7 @@
     select(null, true);
     if (same) { cancel(); return; }
     if (c.kind === 'photo') { cancel(); openPhoto(); return; }
-    if (c.kind === 'road') setMode('paint');
+    if (c.kind === 'road') { st.tile = c.ref; setMode('paint'); }
     else if (c.kind === 'erase') setMode('erase');
     else { st.spec = { kind: c.kind, ref: c.ref, rot: 0 }; setMode('place'); }
   }
@@ -427,7 +430,7 @@
         f[x + ',' + z] = Models.code(BAND_HUES[band], 1);
       }
       v.floor = f;
-      v.items.filter(i => i.kind === 'road').forEach(r => { r.paint = { 0: Models.code(15, 4) }; });
+      v.items.filter(i => R.isRoad(i)).forEach(r => { r.paint = { 0: Models.code(15, 4) }; });
       v.ground = Models.code(4, 1);
     });
     changed(); $('menuPop').hidden = true;
@@ -435,6 +438,14 @@
   }
 
   function tap(cx, cy) {
+    // appreciate view: a tap makes the building hop and do its own thing (bell, sails, lights...)
+    if (st.viewing) {
+      let id = scene.pickItemId(cx, cy);
+      const cell = scene.pickCell(cx, cy);
+      if (!id && cell) { const it = G.itemAt(v, cell[0], cell[1]); id = it && it.kind !== 'road' ? it.id : null; }
+      if (id) scene.react(id); else if (scene.life) scene.life.tap(cell);
+      return;
+    }
     if (st.mode === 'color') { paintTap(cx, cy, false); return; }
     const cell = scene.pickCell(cx, cy);
     if (st.mode === 'place') {
@@ -465,7 +476,7 @@
   function paintAt(cx, cy) {
     const cell = scene.pickCell(cx, cy); if (!cell) return;
     const k = cell.join(); if (stroke.done.has(k)) return; stroke.done.add(k);
-    if (st.mode === 'paint') { if (G.place(v, { kind: 'road', ref: 'road', x: cell[0], z: cell[1], rot: 0 })) scene.sync(v); }
+    if (st.mode === 'paint') { if (G.place(v, { kind: 'road', ref: st.tile || 'road', x: cell[0], z: cell[1], rot: 0 })) scene.sync(v); }
     else { const it = G.itemAt(v, cell[0], cell[1]); if (it) { G.remove(v, it.id); scene.sync(v); } }
   }
   let longT = null, longDone = false, cstroke = null;
@@ -660,6 +671,21 @@
   });
   renderMusicBtn();
 
+  // ---------- nature sounds (water, birds, crickets) and tap sounds in the appreciate view
+  const SFX_KEY = 'bv-sfx-v1', Sound = window.BV.Sound;
+  let sfxOn = store.get(SFX_KEY) !== 'off';
+  if (Sound) Sound.setEnabled(sfxOn);
+  const WATERY = ['pond', 'fountain', 'waterfall', 'waterwheel', 'footbath'];
+  const soundInfo = () => ({ water: scene.tiles('water').size + v.items.filter(i => i.kind === 'model' && WATERY.includes(i.ref)).length * 3, night: scene.night });
+  function renderSfxBtn() { const b = $('bSfx'); if (!b) return; b.textContent = sfxOn ? '자연 소리 끄기' : '자연 소리 켜기'; b.setAttribute('aria-pressed', String(sfxOn)); }
+  if ($('bSfx')) $('bSfx').addEventListener('click', () => {
+    sfxOn = !sfxOn; store.set(SFX_KEY, sfxOn ? 'on' : 'off'); renderSfxBtn();
+    if (!Sound) return;
+    Sound.setEnabled(sfxOn);
+    if (sfxOn && st.viewing) Sound.start(soundInfo);
+  });
+  renderSfxBtn();
+
   function enterView() {
     cancel(); select(null);
     st.viewing = true; st.phase = st.nightTarget ? 0.5 : 0;
@@ -668,6 +694,7 @@
     scene.controls.autoRotate = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     scene.startCars();
     musicPlay();
+    if (Sound && sfxOn) Sound.start(soundInfo);
   }
   function exitView() {
     if (!st.viewing) return;
@@ -675,6 +702,7 @@
     document.body.classList.remove('appreciate'); fitInsets();
     scene.grid.visible = true; scene.controls.autoRotate = false; scene.stopCars();
     musicStop();
+    if (Sound) Sound.stop();
   }
   $('bView').addEventListener('click', enterView);
   $('bPaint').addEventListener('click', () => { if (st.mode === 'color') cancel(); else { select(null, true); st.spec = null; setMode('color'); } });
@@ -1160,7 +1188,7 @@
 
   // ---------- start
   function start() {
-    scene = Scene.create(canvas);
+    scene = Scene.create(canvas);    if (window.BV.Life) scene.life = window.BV.Life.create(scene);
     scene.onFrame = (dt) => {
       let target = st.nightTarget;
       if (st.viewing) { st.phase = (st.phase + dt / 60) % 1; target = 0.5 - 0.5 * Math.cos(st.phase * Math.PI * 2); }

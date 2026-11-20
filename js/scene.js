@@ -111,7 +111,7 @@
           });
           objects.add(obj);
           // leaves of trees and bushes follow the season; roofs (soft surfaces of buildings) get snow in winter
-          const leafy = it.kind === 'deco' && ['tree', 'roundTree', 'bush'].includes(it.ref);
+          const leafy = it.kind === 'deco' && ['tree', 'roundTree', 'bush', 'fruitTree', 'treeSwing'].includes(it.ref);
           obj.traverse(o => { if (o.userData.paintBase === 'soft') { if (leafy) o.userData.leaf = true; else if (it.kind === 'house' || it.kind === 'model') o.userData.roofish = true; } });
           rec = { obj, sig, paintSig: '' };
           live.set(it.id, rec);
@@ -126,7 +126,7 @@
       live.forEach((rec, id) => { if (!seen.has(id)) { objects.remove(rec.obj); live.delete(id); } });
       syncFloor(v);
       const roads = v.items.filter(i => i.kind === 'road');
-      const sig = roads.map(r => r.x + ',' + r.z + (r.paint ? ':' + r.paint[0] : '')).sort().join(';');
+      const sig = roads.map(r => r.x + ',' + r.z + Roads.tileRef(r) + (r.paint ? ':' + r.paint[0] : '')).sort().join(';');
       if (sig !== roadSig) { roadSig = sig; buildRoads(v, roads); }
     }
 
@@ -154,27 +154,60 @@
     }
 
     const tileGeo = new THREE.PlaneGeometry(1, 1); tileGeo.rotateX(-Math.PI / 2);
+    // tiles: kind 'road' with ref 'road' | 'water' (creek) | 'rail'
+    let railCells = new Set(), waterCells = new Set();
+    const railBedMat = new THREE.MeshLambertMaterial({ color: 0xdfe5f1 });
+    const waveMat = new THREE.LineBasicMaterial({ color: 0x5b93ec, transparent: true, opacity: 0.85 });
+    let waves = null;
+    const SIDES = [[1, 0, -1], [2, 1, 0], [4, 0, 1], [8, -1, 0]]; // bit, dx, dz (N E S W)
+    function lineSegs(arr, mat) { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3)); return new THREE.LineSegments(g, mat); }
     function buildRoads(v, roads) {
       roadGroup.clear();
-      roadCells = new Set(roads.map(r => r.x + ',' + r.z));
+      const by = { road: [], water: [], rail: [] };
+      roads.forEach(r => (by[Roads.tileRef(r)] || by.road).push(r));
+      const keyset = list => new Set(list.map(r => r.x + ',' + r.z));
+      roadCells = keyset(by.road); waterCells = keyset(by.water); railCells = keyset(by.rail);
       const occ = Roads.occupancy(v);
+      const s = 0.5, y = 0.025;
+      const tile = (r, mat, yy = 0.012) => { const t = new THREE.Mesh(tileGeo, r.paint && r.paint[0] !== undefined ? Models.paintMat(r.paint[0], 'fill') : mat); t.position.set(r.x + 0.5 - HALF, yy, r.z + 0.5 - HALF); roadGroup.add(t); };
+      const outline = (r, m, edges) => {
+        const cx = r.x + 0.5 - HALF, cz = r.z + 0.5 - HALF;
+        [[1, [-s, -s, s, -s]], [2, [s, -s, s, s]], [4, [-s, s, s, s]], [8, [-s, -s, -s, s]]].forEach(([bit, e]) => { if (!(m & bit)) edges.push(cx + e[0], y, cz + e[1], cx + e[2], y, cz + e[3]); });
+      };
+      // roads: dashed centre lines toward each joined side
       const edges = [], dashes = [];
-      roads.forEach(r => {
-        const cx = r.x + 0.5 - HALF, cz = r.z + 0.5 - HALF, y = 0.025;
-        const t = new THREE.Mesh(tileGeo, r.paint && r.paint[0] !== undefined ? Models.paintMat(r.paint[0], 'fill') : roadMat); t.position.set(cx, 0.012, cz); roadGroup.add(t);
-        const m = Roads.mask(v, r.x, r.z, occ);
-        const s = 0.5;
-        // N, E, S, W sides
-        [[1, [-s, -s, s, -s], [0, -s]], [2, [s, -s, s, s], [s, 0]], [4, [-s, s, s, s], [0, s]], [8, [-s, -s, -s, s], [-s, 0]]].forEach(([bit, e, d]) => {
-          if (m & bit) dashes.push(cx, y, cz, cx + d[0], y, cz + d[1]);
-          else edges.push(cx + e[0], y, cz + e[1], cx + e[2], y, cz + e[3]);
-        });
+      by.road.forEach(r => {
+        tile(r, roadMat);
+        const m = Roads.mask(v, r.x, r.z, occ, 'road'), cx = r.x + 0.5 - HALF, cz = r.z + 0.5 - HALF;
+        SIDES.forEach(([bit, dx, dz]) => { if (m & bit) dashes.push(cx, y, cz, cx + dx * s, y, cz + dz * s); });
+        outline(r, m, edges);
       });
-      const eg = new THREE.BufferGeometry(); eg.setAttribute('position', new THREE.Float32BufferAttribute(edges, 3));
-      roadGroup.add(new THREE.LineSegments(eg, M.line));
-      const dg = new THREE.BufferGeometry(); dg.setAttribute('position', new THREE.Float32BufferAttribute(dashes, 3));
-      const dl = new THREE.LineSegments(dg, dashMat); dl.computeLineDistances(); roadGroup.add(dl);
+      // creek: water tiles with banks and a few ripples
+      const wave = [];
+      by.water.forEach(r => {
+        tile(r, M.water, 0.014);
+        outline(r, Roads.mask(v, r.x, r.z, occ, 'water'), edges);
+        const cx = r.x + 0.5 - HALF, cz = r.z + 0.5 - HALF, k = (r.x * 7 + r.z * 13) % 5;
+        [[-0.2 + k * 0.05, -0.15], [0.15 - k * 0.03, 0.2]].forEach(([ox, oz]) => wave.push(cx + ox - 0.12, 0.03, cz + oz, cx + ox + 0.12, 0.03, cz + oz));
+      });
+      // railway: bed, sleepers and two rails toward each joined side
+      by.rail.forEach(r => {
+        tile(r, railBedMat, 0.013);
+        const m = Roads.mask(v, r.x, r.z, occ, 'rail'), cx = r.x + 0.5 - HALF, cz = r.z + 0.5 - HALF;
+        let sides = SIDES.filter(([bit]) => m & bit);
+        if (!sides.length) sides = [SIDES[1], SIDES[3]];
+        sides.forEach(([, dx, dz]) => {
+          [0.18, 0.4].forEach(d => { const sl = Models.bar(roadGroup, dz ? 0.62 : 0.08, 0.03, dx ? 0.62 : 0.08, cx + dx * d, 0.03, cz + dz * d); sl.material = sleeperMat; });
+          [-0.17, 0.17].forEach(o => Models.bar(roadGroup, dx ? 0.5 : 0.035, 0.04, dz ? 0.5 : 0.035, cx + dx * 0.25 + (dz ? o : 0), 0.06, cz + dz * 0.25 + (dx ? o : 0)));
+        });
+        outline(r, m, edges);
+      });
+      roadGroup.add(lineSegs(edges, M.line));
+      const dl = lineSegs(dashes, dashMat); dl.computeLineDistances(); roadGroup.add(dl);
+      waves = wave.length ? lineSegs(wave, waveMat) : null;
+      if (waves) roadGroup.add(waves);
     }
+    const sleeperMat = new THREE.MeshLambertMaterial({ color: 0xc9a27a });
 
     // ---- ghost preview and selection
     let ghost = null, ghostSig = '';
@@ -360,6 +393,66 @@
       });
     }
 
+    // ---- a little train on the rail tiles (runs whenever there is enough track)
+    const train = { g: null, wagons: [], from: null, to: null, t: 0, trail: [], smoke: null };
+    function makeTrainCar(engine, hue) {
+      const g = new THREE.Group();
+      const body = Models.paintMat(Models.code(hue, 5), 'fill');
+      Models.part(Models.box(0.5, 0.2, 0.3), g, 0, 0.2, 0, body);
+      if (engine) {
+        Models.part(Models.box(0.2, 0.18, 0.3), g, -0.14, 0.39, 0, M.soft);
+        Models.part(new THREE.CylinderGeometry(0.05, 0.06, 0.16, 8), g, 0.15, 0.38, 0);
+        const lamp = new THREE.Mesh(Models.box(0.02, 0.06, 0.08), M.lamp); lamp.position.set(0.26, 0.24, 0); g.add(lamp);
+      } else {
+        Models.part(Models.box(0.44, 0.03, 0.32), g, 0, 0.33, 0, M.soft);
+        [-0.12, 0.12].forEach(x => { const w = new THREE.Mesh(Models.box(0.12, 0.08, 0.02), M.win); w.position.set(x, 0.24, 0.155); g.add(w); });
+      }
+      [-0.16, 0.16].forEach(x => [-0.12, 0.12].forEach(z => { const w = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.04, 10), M.blue); w.rotation.x = Math.PI / 2; w.position.set(x, 0.07, z); g.add(w); }));
+      return g;
+    }
+    const railNbrs = (x, z) => [[0, -1], [1, 0], [0, 1], [-1, 0]].map(([dx, dz]) => [x + dx, z + dz]).filter(([a, b]) => railCells.has(a + ',' + b));
+    function clearTrain() { if (train.g) { scene.remove(train.g); train.wagons.forEach(w => scene.remove(w)); } train.g = null; train.wagons = []; train.trail = []; }
+    function moveTrain(dt, t) {
+      const ok = c => c && railCells.has(c[0] + ',' + c[1]);
+      if (railCells.size < 4) { clearTrain(); return; }
+      if (!train.g || !ok(train.from) || !ok(train.to)) {
+        clearTrain();
+        const cells = [...railCells].map(k => k.split(',').map(Number)).filter(c => railNbrs(...c).length);
+        if (!cells.length) return;
+        train.from = cells[Math.floor(Math.random() * cells.length)];
+        train.to = railNbrs(...train.from)[0]; train.t = 0;
+        train.g = makeTrainCar(true, 0); scene.add(train.g);
+        train.wagons = [8, 3].map(h => { const w = makeTrainCar(false, h); scene.add(w); return w; });
+        train.smoke = Models.addSmoke(train.g, 0.15, 0.5, 0);
+        train.g.traverse(o => { if (o.userData.smoke) o.scale.multiplyScalar(0.4); });
+      }
+      train.t += dt * 1.1;
+      while (train.t >= 1) {
+        train.t -= 1;
+        const nb = railNbrs(...train.to);
+        const ahead = nb.filter(n => n[0] !== train.from[0] || n[1] !== train.from[1]);
+        // keep going straight when the track allows it
+        const dx = train.to[0] - train.from[0], dz = train.to[1] - train.from[1];
+        const straight = ahead.find(n => n[0] - train.to[0] === dx && n[1] - train.to[1] === dz);
+        const next = straight || ahead[Math.floor(Math.random() * ahead.length)] || train.from; // dead end: turn back
+        train.from = train.to; train.to = next;
+      }
+      const x = train.from[0] + (train.to[0] - train.from[0]) * train.t + 0.5 - HALF, z = train.from[1] + (train.to[1] - train.from[1]) * train.t + 0.5 - HALF;
+      const last = train.trail[train.trail.length - 1];
+      if (!last || Math.hypot(last.x - x, last.z - z) > 0.03) { train.trail.push({ x, z }); if (train.trail.length > 200) train.trail.shift(); }
+      const place = (obj, back) => {
+        let d = 0, i = train.trail.length - 1, p = { x, z }, q = p;
+        while (i > 0 && d < back) { q = train.trail[i - 1]; d += Math.hypot(p.x - q.x, p.z - q.z); p = q; i--; }
+        const a = train.trail[Math.max(0, i)], b = train.trail[Math.min(train.trail.length - 1, i + 3)] || a;
+        obj.position.set(p.x, 0.04, p.z);
+        if (a && b && (a.x !== b.x || a.z !== b.z)) obj.rotation.y = Math.atan2(-(b.z - a.z), b.x - a.x);
+      };
+      train.g.position.set(x, 0.04, z);
+      train.g.rotation.y = Math.atan2(-(train.to[1] - train.from[1]), train.to[0] - train.from[0]);
+      train.wagons.forEach((w, k) => place(w, 0.6 * (k + 1)));
+      if (train.smoke) train.smoke(t, dt, night);
+    }
+
     // ---- day / night
     let night = 0;
     function setNight(t) {
@@ -375,6 +468,9 @@
       floorMat.color.setRGB(1, 1, 1).lerp(tmpC.setRGB(0.4, 0.45, 0.62), t); roadMat.color.copy(mix('road'));
       boardMat.color.copy(typeof boardDay !== 'undefined' ? boardDay.clone().lerp(NIGHT.board, t) : mix('board'));
       M.water.color.setHex(0xbcd7ff).lerp(new THREE.Color(0x2a4580), t);
+      railBedMat.color.setHex(0xdfe5f1).lerp(new THREE.Color(0x26375e), t);
+      sleeperMat.color.setHex(0xc9a27a).multiplyScalar(1 - 0.55 * t);
+      waveMat.opacity = 0.85 - 0.5 * t;
       [M.blossom, M.autumn1, M.autumn2, M.snow].forEach((m, i) => m.color.setHex([0xffc9de, 0xffa94d, 0xff8787, 0xffffff][i]).multiplyScalar(1 - 0.5 * t));
       if (typeof rainMat !== 'undefined') { rainMat.color.setHex(t > 0.5 ? 0x8fb6ff : 0x7fa6e8); snowMat.opacity = 1 - 0.3 * t; rainbow.children.forEach(m => { m.material.opacity = 0.55 * (1 - t); }); }
       hemi.intensity = 0.75 - 0.35 * t; sun.intensity = 0.45 - 0.3 * t;
@@ -437,7 +533,11 @@
       const l = new THREE.DirectionalLight(0xffffff, 0.4); l.position.set(3, 6, 4); s.add(l);
       const obj = kind === 'model' ? Models.model(ref) : kind === 'house' ? root.BV.House3D.build(ref) : Models.deco(ref);
       obj.rotation.y = -0.5; s.add(obj);
-      const box = new THREE.Box3().setFromObject(obj), c = box.getCenter(new THREE.Vector3()), r = box.getSize(new THREE.Vector3()).length() / 2;
+      // size the shot by the solid parts only: smoke, light beams and water drops would shrink the picture
+      obj.updateMatrixWorld(true);
+      const box = new THREE.Box3();
+      obj.traverse(o => { if ((o.isMesh || o.isLineSegments) && !o.userData.smoke) box.expandByObject(o); });
+      const c = box.getCenter(new THREE.Vector3()), r = box.getSize(new THREE.Vector3()).length() / 2;
       const cam = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
       cam.position.set(c.x + r * 1.6, c.y + r * 1.4, c.z + r * 2.6); cam.lookAt(c);
       thumbR.render(s, cam);
@@ -470,7 +570,16 @@
 
     const clock = new THREE.Clock();
     if (opts.grid === false) grid.visible = false;
-    const api = { renderer, scene, camera, controls, sync, setGhost, setSelected, pickCell, pickItemId, pickPart, paintParts, partCenter, hitsGround, capture, setSeason, setWeather, setNight, startCars, stopCars, thumbnail, addMarker, clearMarkers, resize, setInsets, grid, paused: false, get night() { return night; }, onFrame: null };
+    // tap in the appreciate view: hop, then the building's own reaction (or a soft chime)
+    function react(id) {
+      const rec = live.get(id); if (!rec) return false;
+      rec.obj.userData.pop = 1;
+      if (rec.obj.userData.react) rec.obj.userData.react();
+      else if (root.BV.Sound && root.BV.Sound.chime) root.BV.Sound.chime();
+      return true;
+    }
+    const tiles = ref => (ref === 'rail' ? railCells : ref === 'water' ? waterCells : roadCells);
+    const api = { HALF, tiles, react, village: () => lastV, objectOf: id => (live.get(id) || {}).obj, life: null, renderer, scene, camera, controls, sync, setGhost, setSelected, pickCell, pickItemId, pickPart, paintParts, partCenter, hitsGround, capture, setSeason, setWeather, setNight, startCars, stopCars, thumbnail, addMarker, clearMarkers, resize, setInsets, grid, paused: false, get night() { return night; }, onFrame: null };
     (function tick() {
       requestAnimationFrame(tick);
       if (api.paused) { clock.getDelta(); return; }
@@ -491,7 +600,9 @@
         }
       });
       if (sel.visible) sel.position.y = 0.04 + Math.abs(Math.sin(t * 3)) * 0.05;
-      moveCars(dt); moveWeather(dt, t);
+      moveCars(dt); moveWeather(dt, t); moveTrain(dt, t);
+      if (waves) waves.position.x = Math.sin(t * 0.8) * 0.07;
+      if (api.life) api.life.update(dt, t, night);
       controls.update();
       renderer.render(scene, camera);
     })();

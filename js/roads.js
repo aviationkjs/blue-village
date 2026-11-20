@@ -11,9 +11,13 @@
     return m;
   }
 
-  function mask(v, x, z, occ = occupancy(v)) {
+  // tiles share kind 'road'; ref tells them apart: 'road' (old saves may have none), 'water' (creek), 'rail'
+  const tileRef = it => (it && it.kind === 'road' ? (it.ref || 'road') : null);
+  const isRoad = it => tileRef(it) === 'road';
+
+  function mask(v, x, z, occ = occupancy(v), ref = 'road') {
     let m = 0;
-    DIRS.forEach(([dx, dz, bit]) => { const it = occ.get((x + dx) + ',' + (z + dz)); if (it && it.kind === 'road') m |= bit; });
+    DIRS.forEach(([dx, dz, bit]) => { if (tileRef(occ.get((x + dx) + ',' + (z + dz))) === ref) m |= bit; });
     return m;
   }
 
@@ -22,9 +26,9 @@
   function autoConnect(v) {
     const occ = occupancy(v);
     const inside = (x, z) => x >= 0 && z >= 0 && x < v.size && z < v.size;
-    const free = (x, z) => { const it = occ.get(x + ',' + z); return inside(x, z) && (!it || it.kind === 'road'); };
+    const free = (x, z) => { const it = occ.get(x + ',' + z); return inside(x, z) && (!it || isRoad(it)); };
     const net = new Set();
-    occ.forEach((it, k) => { if (it.kind === 'road') net.add(k); });
+    occ.forEach((it, k) => { if (isRoad(it)) net.add(k); });
     const added = [];
     const add = (x, z) => { const k = x + ',' + z; if (!occ.has(k) && !net.has(k)) added.push([x, z]); net.add(k); };
 
@@ -55,7 +59,7 @@
     return added;
   }
 
-  const api = { DIRS, occupancy, mask, autoConnect, isBuilding };
+  const api = { DIRS, occupancy, mask, autoConnect, isBuilding, tileRef, isRoad };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.BV.Roads = api;
 })(this);
