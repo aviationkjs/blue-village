@@ -106,38 +106,41 @@
     return dh;
   }
 
+  // roofs use the roof material (M.soft): painted apart from the walls, snowy in winter.
+  // Only the material changes; the order of parts (and so saved paint) stays the same.
+  const rp = (geo, g, x, y, z) => part(geo, g, x, y, z, M.soft);
   function roof(g, s) {
     const y = s.h, W = s.w + s.o, D = s.d + s.o, rh = s.rh;
     switch (s.roof) {
-      case 'side': { const r = part(gable(D, rh, W), g, 0, y, 0); r.rotation.y = Math.PI / 2; break; }
-      case 'hip': part(hipRoof(W, D, rh, Math.min(W, D) * 0.42), g, 0, y, 0); break;
+      case 'side': { const r = rp(gable(D, rh, W), g, 0, y, 0); r.rotation.y = Math.PI / 2; break; }
+      case 'hip': rp(hipRoof(W, D, rh, Math.min(W, D) * 0.42), g, 0, y, 0); break;
       case 'shed': {
-        part(extrude(shapeGeo([[-s.w / 2, 0], [s.w / 2, 0], [s.w / 2, rh]]), s.d), g, 0, y, 0);
-        const L = Math.hypot(W, rh), slab = part(box(L, 0.1, D), g, 0, y + rh / 2 + 0.05, 0);
+        rp(extrude(shapeGeo([[-s.w / 2, 0], [s.w / 2, 0], [s.w / 2, rh]]), s.d), g, 0, y, 0);
+        const L = Math.hypot(W, rh), slab = rp(box(L, 0.1, D), g, 0, y + rh / 2 + 0.05, 0);
         slab.rotation.z = Math.atan2(rh, W); break;
       }
-      case 'flat': part(box(W, 0.14, D), g, 0, y + 0.07, 0); break;
+      case 'flat': rp(box(W, 0.14, D), g, 0, y + 0.07, 0); break;
       case 'round': {
         const sh = new THREE.Shape(); sh.moveTo(W / 2, 0); sh.absellipse(0, 0, W / 2, rh, 0, Math.PI, false); sh.closePath();
-        part(extrude(sh, D), g, 0, y, 0); break;
+        rp(extrude(sh, D), g, 0, y, 0); break;
       }
-      case 'twin': [-1, 1].forEach(k => part(gable(W / 2 + 0.06, rh, D), g, k * W / 4, y, 0)); break;
+      case 'twin': [-1, 1].forEach(k => rp(gable(W / 2 + 0.06, rh, D), g, k * W / 4, y, 0)); break;
       case 'tiled': {
-        part(hipRoof(W, D, rh, Math.min(W, D) * 0.4), g, 0, y, 0);
+        rp(hipRoof(W, D, rh, Math.min(W, D) * 0.4), g, 0, y, 0);
         [0.3, 0.6].forEach(t => bar(g, W * (1 - t * 0.55), 0.05, 0.05, 0, y + rh * t + 0.03, D / 2 * (1 - t) + 0.03));
         break;
       }
       case 'hanok': {
-        part(box(s.w + 0.06, 0.12, s.d + 0.06), g, 0, y + 0.06, 0);
+        rp(box(s.w + 0.06, 0.12, s.d + 0.06), g, 0, y + 0.06, 0);
         const RW = W + 0.45, RD = D + 0.35, ridge = RW - RD * 1.1;
-        part(hipRoof(RW, RD, rh, (RW - ridge) / 2), g, 0, y + 0.12, 0);
+        rp(hipRoof(RW, RD, rh, (RW - ridge) / 2), g, 0, y + 0.12, 0);
         bar(g, ridge + 0.1, 0.1, 0.1, 0, y + 0.14 + rh, 0);
         [-1, 1].forEach(a => { const t = bar(g, 0.22, 0.08, 0.08, a * (ridge / 2 + 0.1), y + 0.2 + rh, 0); t.rotation.z = a * 0.6; });
         [[1, 1], [1, -1], [-1, 1], [-1, -1]].forEach(([a, b]) => { const t = bar(g, 0.16, 0.05, 0.05, a * (RW / 2 + 0.03), y + 0.17, b * (RD / 2)); t.rotation.z = a * 0.7; });
         break;
       }
       case 'aframe': break; // the whole house is the roof; drawn in build()
-      default: part(gable(W, rh, D), g, 0, y, 0);
+      default: rp(gable(W, rh, D), g, 0, y, 0);
     }
   }
 
