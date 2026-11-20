@@ -32,10 +32,10 @@
   const h = new G.History(v);
 
   // mode: idle | place | paint | erase | move
-  const st = { color: 0, mode: 'idle', spec: null, sel: null, cat: Cats.CATS[0].id, viewing: false, nightTarget: 0, phase: 0 };
+  const st = { color: 106, hue: 0, tone: 6, dropper: false, mode: 'idle', spec: null, sel: null, cat: Cats.CATS[0].id, viewing: false, nightTarget: 0, phase: 0 };
   let scene;
 
-  const painted = () => v.items.some(i => i.paint);
+  const painted = () => v.items.some(i => i.paint) || !!v.floor || v.ground !== undefined;
   let wasRainbow = null;
   function updateTitle() {
     const r = painted();
@@ -77,8 +77,11 @@
       if (st.spec.kind !== 'road') el.append(btn('돌리기', rotateAction));
       el.append(btn('그만', cancel));
     } else if (st.mode === 'color') {
-      const c = st.color < 0 ? '흰색(지우기)' : Models.PALETTE[st.color].name;
-      text.append(strong(c), ' 면 누르기 · 길게 누르면 통째로');
+      if (st.dropper) text.append(strong('스포이드'), ' 색을 집을 곳을 누르세요');
+      else {
+        const dot = document.createElement('i'); dot.className = 'dot'; dot.style.background = st.color < 0 ? '#fff' : hexCss(st.color);
+        text.append(dot, strong(st.color < 0 ? '지우기' : Models.colorName(st.color)), ' 누르기·끌기·길게');
+      }
       el.append(btn('🌈 자동', rainbowAll), btn('그만', cancel));
     } else if (st.mode === 'paint') {
       text.append(strong('길'), ' 칸을 누르거나 끌어서 깔아요');
@@ -160,6 +163,7 @@
     const painting = m === 'paint' || m === 'erase';
     document.body.classList.toggle('painting', painting);
     document.body.classList.toggle('coloring', m === 'color');
+    if (m !== 'color') st.dropper = false;
     $('bPaint').setAttribute('aria-pressed', String(m === 'color'));
     if (m === 'color') renderPalette();
     scene.controls.enableRotate = !painting;
@@ -209,58 +213,167 @@
     toast(eul(nameOf(it)) + ' 지웠어요 · 되돌리기로 살릴 수 있어요');
   }
 
-  // ---------- rainbow paint
+  // ---------- colour paint: buildings (one surface at a time), roads, floor cells, the round land
+  const RECENT = 'bv-recent-colors';
+  let recent = [];
+  try { recent = JSON.parse(store.get(RECENT) || '[]').filter(Models.validColor).slice(0, 6); } catch (e) { recent = []; }
+  const hexCss = c => '#' + Models.colorHex(c).toString(16).padStart(6, '0');
+  const ERASER = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 20l-4-4 10-10 6 6-8 8z"/><path d="M8 20h12M10 10l6 6"/></svg>';
+  const DROPPER = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4l6 6M17 7l-9.5 9.5L5 19l-1 1M15 5l4 4"/><path d="M12 9l3 3"/></svg>';
+  function useColor(c) {
+    st.color = c; st.dropper = false;
+    if (c >= 100) { st.hue = Math.floor((c - 100) / 16); st.tone = (c - 100) % 16; }
+    renderPalette(); renderHint();
+  }
+  function remember(c) {
+    if (c < 0 || recent[0] === c) return;
+    recent = [c, ...recent.filter(x => x !== c)].slice(0, 6);
+    store.set(RECENT, JSON.stringify(recent));
+    renderPalette();
+  }
+  function iconBtn(svg, label, on, fn) {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'mini';
+    b.innerHTML = svg; b.setAttribute('aria-label', label); b.title = label; b.setAttribute('aria-pressed', String(on));
+    b.addEventListener('click', fn); return b;
+  }
   function renderPalette() {
     const box = $('palette'); box.replaceChildren();
-    const sw = (ci, label) => {
-      const b = document.createElement('button'); b.type = 'button'; b.className = 'sw' + (ci < 0 ? ' white' : '');
-      b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(st.color === ci));
-      b.setAttribute('aria-label', label); b.title = label;
-      if (ci >= 0) b.style.setProperty('--c', '#' + Models.PALETTE[ci].hex.toString(16).padStart(6, '0')); else b.textContent = '지우기';
-      b.addEventListener('click', () => { st.color = ci; renderPalette(); renderHint(); });
-      box.append(b);
+    const strip = (label, list) => {
+      const row = document.createElement('div'); row.className = 'strip'; row.setAttribute('role', 'group'); row.setAttribute('aria-label', label);
+      list.forEach(([c, name, on, fn]) => {
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'seg';
+        b.style.setProperty('--c', hexCss(c)); b.setAttribute('aria-label', name); b.title = name; b.setAttribute('aria-pressed', String(on));
+        b.addEventListener('click', fn); row.append(b);
+      });
+      box.append(row);
     };
-    Models.PALETTE.forEach((p, i) => sw(i, p.name));
-    sw(-1, '흰색 (색 지우기)');
+    strip('색상 16가지', Array.from({ length: 16 }, (_, hu) => [Models.code(hu, hu === 15 ? 8 : 6), Models.HUE_NAMES[hu], st.color >= 100 && st.hue === hu, () => { st.hue = hu; useColor(Models.code(hu, st.tone)); }]));
+    strip('밝기 16단계', Array.from({ length: 16 }, (_, t) => { const c = Models.code(st.hue, t); return [c, Models.colorName(c), st.color === c, () => useColor(c)]; }));
+    const row = document.createElement('div'); row.className = 'tools-row';
+    const cur = document.createElement('span'); cur.className = 'cur' + (st.color < 0 ? ' white' : ''); cur.title = '지금 색';
+    cur.style.setProperty('--c', st.color < 0 ? '#ffffff' : hexCss(st.color));
+    row.append(cur);
+    recent.forEach(c => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'sw';
+      b.style.setProperty('--c', hexCss(c)); b.setAttribute('aria-label', '최근 색 ' + Models.colorName(c)); b.title = '최근 색';
+      b.addEventListener('click', () => useColor(c)); row.append(b);
+    });
+    const grow = document.createElement('span'); grow.className = 'grow'; row.append(grow);
+    row.append(iconBtn(ERASER, '지우기 (하얗게)', st.color < 0 && !st.dropper, () => useColor(-1)),
+      iconBtn(DROPPER, '스포이드 (칠한 색 집기)', st.dropper, () => { st.dropper = !st.dropper; renderPalette(); renderHint(); }));
+    box.append(row);
   }
   function setPaint(it, idxs, ci) {
     const p = { ...(it.paint || {}) };
     idxs.forEach(i => { if (ci < 0) delete p[i]; else p[i] = ci; });
     if (Object.keys(p).length) it.paint = p; else delete it.paint;
   }
-  function paintTap(cx, cy, whole) {
-    const hit = scene.pickPart(cx, cy);
-    if (!hit) { toast('건물이나 나무의 면을 눌러 칠해요'); return; }
-    const it = v.items.find(i => i.id === hit.itemId); if (!it) return;
-    if (whole) {
-      // walls and roofs/leaves take the colour; windows stay light so the house still reads
-      const parts = scene.paintParts(it.id).filter(p => p.base !== 'win' || st.color < 0).map(p => p.idx);
-      h.commit(() => setPaint(it, parts, st.color));
-      changed(it.id);
-      toast(st.color < 0 ? eul(nameOf(it)) + ' 하얗게 되돌렸어요' : nameOf(it) + ' 통째로 칠했어요');
-    } else {
-      h.commit(() => setPaint(it, [hit.idx], st.color));
-      changed();
-    }
+  function setFloor(k, c) {
+    v.floor = { ...(v.floor || {}) };
+    if (c < 0) delete v.floor[k]; else v.floor[k] = c;
+    if (!Object.keys(v.floor).length) delete v.floor;
   }
-  // stripes of the rainbow across the board; roofs one step further along, leaves in greens
+  function surfaceAt(cx, cy) {
+    const part = scene.pickPart(cx, cy);
+    if (part) { const it = v.items.find(i => i.id === part.itemId); if (it) return { type: 'part', it, idx: part.idx, base: part.base }; }
+    const cell = scene.pickCell(cx, cy);
+    if (cell) {
+      const it = G.itemAt(v, cell[0], cell[1]);
+      if (it && it.kind === 'road') return { type: 'road', it, cell };
+      return { type: 'floor', cell, under: it };
+    }
+    return scene.hitsGround(cx, cy) ? { type: 'ground' } : null;
+  }
+  const codeAt = s => s.type === 'part' ? (s.it.paint || {})[s.idx] : s.type === 'road' ? (s.it.paint || {})[0]
+    : s.type === 'floor' ? (v.floor || {})[s.cell.join()] : v.ground;
+  function paintSurface(s, c) {
+    if (s.type === 'part') setPaint(s.it, [s.idx], c);
+    else if (s.type === 'road') setPaint(s.it, [0], c);
+    else if (s.type === 'floor') setFloor(s.cell.join(), c);
+    else if (c < 0) delete v.ground; else v.ground = c;
+  }
+  const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  function connectedRoads(cell) {
+    const roads = new Map(v.items.filter(i => i.kind === 'road').map(r => [r.x + ',' + r.z, r]));
+    const seen = new Set([cell.join()]), q = [cell], out = [];
+    while (q.length) {
+      const [x, z] = q.pop(); out.push(roads.get(x + ',' + z));
+      N4.forEach(([dx, dz]) => { const k = (x + dx) + ',' + (z + dz); if (roads.has(k) && !seen.has(k)) { seen.add(k); q.push([x + dx, z + dz]); } });
+    }
+    return out;
+  }
+  // same-colour floor area, bounded by roads (like the lines of a colouring book); buildings sit on top of it
+  function floodFloor(cell, orig) {
+    const roads = new Set(v.items.filter(i => i.kind === 'road').map(r => r.x + ',' + r.z));
+    const f = v.floor || {};
+    const seen = new Set([cell.join()]), q = [cell];
+    while (q.length) {
+      const [x, z] = q.pop();
+      N4.forEach(([dx, dz]) => {
+        const nx = x + dx, nz = z + dz, k = nx + ',' + nz;
+        if (nx < 0 || nz < 0 || nx >= v.size || nz >= v.size || seen.has(k) || roads.has(k) || f[k] !== orig) return;
+        seen.add(k); q.push([nx, nz]);
+      });
+    }
+    return [...seen];
+  }
+  function paintTap(cx, cy, whole) {
+    const s = surfaceAt(cx, cy);
+    if (!s) { toast('건물, 길, 바닥을 눌러 칠해요'); return; }
+    if (st.dropper) {
+      const c = codeAt(s);
+      useColor(c === undefined ? -1 : c);
+      toast(c === undefined ? '칠하지 않은 곳이라 지우기를 골랐어요' : Models.colorName(c) + ' 색을 집었어요');
+      return;
+    }
+    const c = st.color;
+    if (!whole || s.type === 'ground') { h.commit(() => paintSurface(s, c)); changed(); }
+    else if (s.type === 'part') {
+      // walls and roofs/leaves take the colour; windows stay light so the house still reads
+      const parts = scene.paintParts(s.it.id).filter(p => p.base !== 'win' || c < 0).map(p => p.idx);
+      h.commit(() => setPaint(s.it, parts, c));
+      changed(s.it.id);
+      toast(c < 0 ? eul(nameOf(s.it)) + ' 하얗게 되돌렸어요' : nameOf(s.it) + ' 통째로 칠했어요');
+    } else if (s.type === 'road') {
+      const net = connectedRoads(s.cell);
+      h.commit(() => net.forEach(r => setPaint(r, [0], c))); changed();
+      toast(`이어진 길 ${net.length}칸을 칠했어요`);
+    } else {
+      const cells = floodFloor(s.cell, codeAt(s));
+      h.commit(() => cells.forEach(k => setFloor(k, c))); changed();
+      toast(`바닥 ${cells.length}칸을 한 번에 칠했어요`);
+    }
+    remember(c);
+  }
+  // rainbow stripes across the village: buildings in bands, roofs one step on, leaves green,
+  // floor in pale rainbow bands, roads light grey, the round land soft green
   function rainbowAll() {
     const things = v.items.filter(i => i.kind !== 'road');
-    if (!things.length) { toast('칠할 건물이 없어요'); return; }
     const n = Models.PALETTE.length;
     const diag = it => (it.x + it.w / 2) - (it.z + it.d / 2);
-    const lo = Math.min(...things.map(diag)), hi = Math.max(...things.map(diag));
-    h.commit(() => things.forEach(it => {
-      const parts = scene.paintParts(it.id); if (!parts.length) return;
-      const band = Math.min(n - 1, Math.floor((diag(it) - lo) / (hi - lo + 1e-6) * n));
-      const p = {};
-      parts.forEach(({ idx, base }) => {
-        if (base === 'win') return;
-        if (it.kind === 'deco') { if (base === 'soft') p[idx] = (idx + it.id) % 2 ? 3 : 4; return; }
-        p[idx] = base === 'soft' ? (band + 1) % n : band;
+    const lo = things.length ? Math.min(...things.map(diag)) : 0, hi = things.length ? Math.max(...things.map(diag)) : 1;
+    const BAND_HUES = [0, 1, 3, 5, 8, 9, 11, 13];
+    h.commit(() => {
+      things.forEach(it => {
+        const parts = scene.paintParts(it.id); if (!parts.length) return;
+        const band = Math.min(n - 1, Math.floor((diag(it) - lo) / (hi - lo + 1e-6) * n));
+        const p = {};
+        parts.forEach(({ idx, base }) => {
+          if (base === 'win') return;
+          if (it.kind === 'deco') { if (base === 'soft') p[idx] = (idx + it.id) % 2 ? 3 : 4; return; }
+          p[idx] = base === 'soft' ? (band + 1) % n : band;
+        });
+        if (Object.keys(p).length) it.paint = p; else delete it.paint;
       });
-      if (Object.keys(p).length) it.paint = p; else delete it.paint;
-    }));
+      const f = {};
+      for (let x = 0; x < v.size; x++) for (let z = 0; z < v.size; z++) {
+        const band = Math.min(7, Math.floor((x - z + v.size) / (v.size * 2) * 8));
+        f[x + ',' + z] = Models.code(BAND_HUES[band], 1);
+      }
+      v.floor = f;
+      v.items.filter(i => i.kind === 'road').forEach(r => { r.paint = { 0: Models.code(15, 4) }; });
+      v.ground = Models.code(4, 1);
+    });
     changed(); $('menuPop').hidden = true;
     toast('🌈 마을을 무지개로 칠했어요 · 마음에 안 들면 되돌리기', true);
   }
@@ -299,13 +412,46 @@
     if (st.mode === 'paint') { if (G.place(v, { kind: 'road', ref: 'road', x: cell[0], z: cell[1], rot: 0 })) scene.sync(v); }
     else { const it = G.itemAt(v, cell[0], cell[1]); if (it) { G.remove(v, it.id); scene.sync(v); } }
   }
-  let longT = null, longDone = false;
+  let longT = null, longDone = false, cstroke = null;
+  // colour mode: a drag that starts on the floor or a road paints cells instead of turning the camera
+  // (capture phase, so it runs before the camera controls see the press)
+  canvas.addEventListener('pointerdown', e => {
+    if (st.mode !== 'color' || st.dropper || !e.isPrimary) return;
+    const s = surfaceAt(e.clientX, e.clientY);
+    if (s && (s.type === 'floor' || s.type === 'road')) {
+      scene.controls.enableRotate = false;
+      cstroke = { before: G.serialize(v), done: new Set(), active: false };
+    }
+  }, true);
+  function colorAt(cx, cy) {
+    const cell = scene.pickCell(cx, cy); if (!cell) return;
+    const k = cell.join(); if (cstroke.done.has(k)) return; cstroke.done.add(k);
+    const it = G.itemAt(v, cell[0], cell[1]);
+    if (it && it.kind === 'road') setPaint(it, [0], st.color);
+    else if (!it) setFloor(k, st.color);
+    else return;
+    scene.sync(v);
+  }
+  function endColorStroke() {
+    if (!cstroke) return false;
+    const was = cstroke; cstroke = null;
+    scene.controls.enableRotate = true;
+    if (!was.active) return false;
+    h.record(was.before); changed(); remember(st.color);
+    return true;
+  }
   canvas.addEventListener('pointerdown', e => {
     down = { x: e.clientX, y: e.clientY, id: e.pointerId, multi: down && down.id !== e.pointerId };
     clearTimeout(longT); longDone = false;
-    if (st.mode === 'color' && !down.multi) {
+    if (down.multi) { endColorStroke(); return; }
+    if (st.mode === 'color') {
       const d0 = down;
-      longT = setTimeout(() => { if (down === d0 && !d0.moved) { longDone = true; paintTap(d0.x, d0.y, true); if (navigator.vibrate) try { navigator.vibrate(20); } catch (err) { /* ignore */ } } }, 520);
+      longT = setTimeout(() => {
+        if (down !== d0 || d0.moved) return;
+        longDone = true; if (cstroke) { cstroke = null; scene.controls.enableRotate = true; }
+        paintTap(d0.x, d0.y, true);
+        if (navigator.vibrate) try { navigator.vibrate(20); } catch (err) { /* ignore */ }
+      }, 520);
     }
     if ((st.mode === 'paint' || st.mode === 'erase') && e.isPrimary) {
       stroke = { before: G.serialize(v), done: new Set() };
@@ -315,18 +461,23 @@
   });
   canvas.addEventListener('pointermove', e => {
     if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) >= 7) down.moved = true;
+    if (cstroke && down && down.moved) {
+      if (!cstroke.active) { cstroke.active = true; clearTimeout(longT); colorAt(down.x, down.y); }
+      colorAt(e.clientX, e.clientY); return;
+    }
     if (stroke) { paintAt(e.clientX, e.clientY); return; }
     if (e.pointerType === 'mouse' && (st.mode === 'place' || st.mode === 'move')) updateGhost(scene.pickCell(e.clientX, e.clientY));
   });
   canvas.addEventListener('pointerup', e => {
-    if (stroke) { h.record(stroke.before); stroke = null; changed(); return; }
     clearTimeout(longT);
+    if (endColorStroke()) { down = null; return; }
+    if (stroke) { h.record(stroke.before); stroke = null; changed(); return; }
     if (longDone) { longDone = false; down = null; return; }
     if (down && !down.multi && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 7) tap(e.clientX, e.clientY);
     down = null;
   });
   canvas.addEventListener('contextmenu', e => { if (st.mode === 'color') e.preventDefault(); });
-  canvas.addEventListener('pointercancel', () => { clearTimeout(longT); if (stroke) { h.record(stroke.before); stroke = null; changed(); } down = null; });
+  canvas.addEventListener('pointercancel', () => { clearTimeout(longT); endColorStroke(); if (stroke) { h.record(stroke.before); stroke = null; changed(); } down = null; });
   canvas.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && st.mode === 'place') scene.setGhost(null); });
 
   // ---------- fold the card row (phones: gives the board most of the screen)
@@ -399,7 +550,7 @@
   $('bUnpaint').addEventListener('click', () => {
     $('menuPop').hidden = true;
     if (!painted()) { toast('칠한 색이 없어요'); return; }
-    h.commit(() => v.items.forEach(i => { delete i.paint; })); changed();
+    h.commit(() => { v.items.forEach(i => { delete i.paint; }); delete v.floor; delete v.ground; }); changed();
     toast('색을 모두 지웠어요 · 되돌리기로 살릴 수 있어요');
   });
   $('exitView').addEventListener('click', exitView);
@@ -408,12 +559,12 @@
   $('bMenu').addEventListener('click', () => { pop.hidden = !pop.hidden; $('bMenu').setAttribute('aria-expanded', String(!pop.hidden)); });
   document.addEventListener('pointerdown', e => { if (!pop.hidden && !e.target.closest('.menu')) { pop.hidden = true; $('bMenu').setAttribute('aria-expanded', 'false'); } });
   $('bNew').addEventListener('click', () => {
-    h.commit(() => { v.items = []; }); select(null); changed(); pop.hidden = true;
+    h.commit(() => { v.items = []; delete v.floor; delete v.ground; }); select(null); changed(); pop.hidden = true;
     toast('새 마을을 시작했어요 · 되돌리기로 되살릴 수 있어요');
   });
   $('bExample').addEventListener('click', () => {
     const ex = exampleVillage();
-    h.commit(() => { v.items = ex.items; v.nextId = ex.nextId; }); select(null); changed(); pop.hidden = true;
+    h.commit(() => { v.items = ex.items; v.nextId = ex.nextId; delete v.floor; delete v.ground; }); select(null); changed(); pop.hidden = true;
     toast('예시 마을을 다시 지었어요');
   });
 

@@ -56,13 +56,30 @@
       recolor() {
         const cand = things().filter(i => (i.kind === 'house' || i.kind === 'model') && clear(cellsOf(i)));
         const it = pick(cand.filter(i => i.paint).length ? cand.filter(i => i.paint) : cand); if (!it) return false;
+        const old = it.paint || {};
         const p = it.paint = { ...(it.paint || {}) };
         const keys = Object.keys(p);
         const k = keys.length ? pick(keys) : '0';
         let c = p[k];
-        while (c === p[k]) c = Math.floor(rand() * 8);
+        while (c === p[k]) c = old[k] !== undefined && old[k] >= 100 ? 100 + Math.floor(rand() * 15) * 16 + 4 + Math.floor(rand() * 6) : Math.floor(rand() * 8);
         p[k] = c;
         add({ type: 'recolor', ids: [it.id], label: '색이 바뀌었어요' }, it); return true;
+      },
+      floorColor() {
+        for (let n = 0; n < 40; n++) {
+          const x = Math.floor(rand() * (b.size - 1)), z = Math.floor(rand() * (b.size - 1));
+          const cells = [[x, z], [x + 1, z], [x, z + 1], [x + 1, z + 1]];
+          if (!clear(cells) || cells.some(([a, c]) => G.itemAt(b, a, c))) continue;
+          b.floor = { ...(b.floor || {}) };
+          const was = b.floor[x + ',' + z];
+          let col = was;
+          while (col === was) col = 100 + Math.floor(rand() * 15) * 16 + 2 + Math.floor(rand() * 3);
+          cells.forEach(([a, c]) => { b.floor[a + ',' + c] = col; });
+          claim(cells);
+          diffs.push({ type: 'floor', ids: [], label: '바닥 색이 바뀌었어요', cells, x, z, w: 2, d: 2 });
+          return true;
+        }
+        return false;
       },
       swapDeco() {
         const it = pick(things().filter(i => (i.ref === 'tree' || i.ref === 'roundTree') && clear(cellsOf(i)))); if (!it) return false;
@@ -71,7 +88,8 @@
       },
     };
     const names = ['remove', 'remove', 'add', 'add', 'rotate', 'swap', 'swap', 'swapDeco'];
-    if (v.items.some(i => i.paint)) names.push('recolor', 'recolor');
+    if (v.items.some(i => i.paint && i.kind !== 'road')) names.push('recolor', 'recolor');
+    if (v.floor && Object.keys(v.floor).length) names.push('floorColor', 'floorColor');
     for (let tries = 0; tries < 200 && diffs.length < count; tries++) ops[pick(names)]();
     return { village: b, diffs };
   }

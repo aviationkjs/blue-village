@@ -230,6 +230,21 @@
     { name: '빨강', hex: 0xff6b6b }, { name: '주황', hex: 0xffa94d }, { name: '노랑', hex: 0xffd43b }, { name: '초록', hex: 0x69db7c },
     { name: '하늘', hex: 0x4dabf7 }, { name: '남색', hex: 0x5c7cfa }, { name: '보라', hex: 0xb197fc }, { name: '분홍', hex: 0xf783ac },
   ];
+  // colour codes: 0..7 = the first rainbow set (kept for old saves); 100..355 = 16 hues x 16 tones
+  const HUE_NAMES = ['빨강', '주황', '귤색', '노랑', '연두', '초록', '청록', '하늘빛', '하늘', '파랑', '남색', '보라', '자주', '분홍', '장미', '회색'];
+  const code = (hue, tone) => 100 + hue * 16 + tone;
+  function colorHex(c) {
+    if (c >= 0 && c < PALETTE.length) return PALETTE[c].hex;
+    const hue = Math.floor((c - 100) / 16), tone = (c - 100) % 16;
+    const col = new THREE.Color().setHSL(hue === 15 ? 0 : hue * 24 / 360, hue === 15 ? 0 : 0.78, 0.94 - tone * 0.76 / 15);
+    return col.getHex();
+  }
+  function colorName(c) {
+    if (c >= 0 && c < PALETTE.length) return PALETTE[c].name;
+    const hue = Math.floor((c - 100) / 16), tone = (c - 100) % 16;
+    return (tone < 5 ? '연한 ' : tone > 10 ? '진한 ' : '') + HUE_NAMES[hue];
+  }
+  const validColor = c => Number.isInteger(c) && ((c >= 0 && c < PALETTE.length) || (c >= 100 && c < 356));
   const paintMats = {};
   let paintNightT = 0;
   function paintNightColor(day, base) {
@@ -238,7 +253,7 @@
   function paintMat(ci, base) {
     const key = ci + ':' + base;
     if (paintMats[key]) return paintMats[key].mat;
-    const day = C(PALETTE[ci % PALETTE.length].hex);
+    const day = C(colorHex(ci));
     const opt = { color: day.clone(), ...off };
     const mat = base === 'win' ? new THREE.MeshBasicMaterial(opt) : new THREE.MeshLambertMaterial({ ...opt, side: base === 'soft' ? THREE.DoubleSide : THREE.FrontSide });
     paintMats[key] = { mat, day, night: paintNightColor(day, base) };
@@ -252,5 +267,5 @@
   // which shared material a mesh started with decides whether (and how) it can be painted
   function paintBaseOf(mat) { return mat === M.fill ? 'fill' : mat === M.soft ? 'soft' : mat === M.win ? 'win' : null; }
 
-  root.BV.Models = { PALETTE, paintMat, setPaintNight, paintBaseOf, DAY, NIGHT, M, part, box, bar, gable, hipRoof, windowOn, leaf, addSmoke, model, deco, NAMES, DECO_NAMES, MODEL_REFS: Object.keys(NAMES), DECO_REFS: Object.keys(DECO) };
+  root.BV.Models = { PALETTE, HUE_NAMES, code, colorHex, colorName, validColor, paintMat, setPaintNight, paintBaseOf, DAY, NIGHT, M, part, box, bar, gable, hipRoof, windowOn, leaf, addSmoke, model, deco, NAMES, DECO_NAMES, MODEL_REFS: Object.keys(NAMES), DECO_REFS: Object.keys(DECO) };
 })(this);

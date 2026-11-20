@@ -76,7 +76,13 @@
     }
   }
 
-  function serialize(v) { return JSON.stringify({ size: v.size, items: v.items, nextId: v.nextId }); }
+  // floor: { "x,z": colour } painted cells; ground: colour of the round land around the board
+  function serialize(v) {
+    const o = { size: v.size, items: v.items, nextId: v.nextId };
+    if (v.floor && Object.keys(v.floor).length) o.floor = v.floor;
+    if (v.ground !== undefined) o.ground = v.ground;
+    return JSON.stringify(o);
+  }
 
   function deserialize(str) {
     try {
@@ -93,7 +99,14 @@
         if (!Object.keys(i.paint).length) delete i.paint;
       });
       const nextId = Math.max(o.nextId | 0, ...o.items.map(i => i.id + 1), 1);
-      return { size: o.size, items: o.items, nextId };
+      const out = { size: o.size, items: o.items, nextId };
+      if (o.floor && typeof o.floor === 'object') {
+        const f = {};
+        Object.keys(o.floor).forEach(k => { if (/^\d+,\d+$/.test(k) && Number.isInteger(o.floor[k])) f[k] = o.floor[k]; });
+        if (Object.keys(f).length) out.floor = f;
+      }
+      if (Number.isInteger(o.ground)) out.ground = o.ground;
+      return out;
     } catch (e) { return null; }
   }
 
@@ -101,7 +114,11 @@
   class History {
     constructor(v, limit = 100) { this.v = v; this.past = []; this.future = []; this.limit = limit; }
     snap() { return serialize(this.v); }
-    restore(s) { const o = JSON.parse(s); this.v.items = o.items; this.v.nextId = o.nextId; this.v.size = o.size; }
+    restore(s) {
+      const o = JSON.parse(s); this.v.items = o.items; this.v.nextId = o.nextId; this.v.size = o.size;
+      if (o.floor) this.v.floor = o.floor; else delete this.v.floor;
+      if (o.ground !== undefined) this.v.ground = o.ground; else delete this.v.ground;
+    }
     commit(fn) {
       const before = this.snap();
       const out = fn();

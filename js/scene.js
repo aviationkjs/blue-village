@@ -39,6 +39,36 @@
     const gridGeo = new THREE.BufferGeometry(); gridGeo.setAttribute('position', new THREE.Float32BufferAttribute(gl, 3));
     const grid = new THREE.LineSegments(gridGeo, gridMat); scene.add(grid);
 
+    // painted floor cells (one instanced mesh) and the colour of the round land
+    const floorMat = new THREE.MeshLambertMaterial({ color: 0xffffff, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+    const floorGeo = new THREE.PlaneGeometry(1, 1); floorGeo.rotateX(-Math.PI / 2);
+    const floorMesh = new THREE.InstancedMesh(floorGeo, floorMat, SIZE * SIZE);
+    // colour buffer sized for every cell up front (three r128 sizes it from count on first use)
+    floorMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(SIZE * SIZE * 3), 3);
+    floorMesh.frustumCulled = false;
+    floorMesh.count = 0; floorMesh.position.y = 0.004; scene.add(floorMesh);
+    let floorSig = '', groundCode;
+    const groundDay = DAY.ground.clone(), groundNight = NIGHT.ground.clone();
+    const m4 = new THREE.Matrix4(), tmpC = new THREE.Color();
+    function syncFloor(v) {
+      const f = v.floor || {};
+      const sig = JSON.stringify(f) + '|' + v.ground;
+      if (sig === floorSig) return; floorSig = sig;
+      const keys = Object.keys(f);
+      keys.forEach((k, i) => {
+        const [x, z] = k.split(',').map(Number);
+        m4.makeTranslation(x + 0.5 - HALF, 0, z + 0.5 - HALF); floorMesh.setMatrixAt(i, m4);
+        floorMesh.setColorAt(i, tmpC.setHex(Models.colorHex(f[k])));
+      });
+      floorMesh.count = keys.length;
+      floorMesh.instanceMatrix.needsUpdate = true;
+      if (floorMesh.instanceColor) floorMesh.instanceColor.needsUpdate = true;
+      groundCode = v.ground;
+      if (groundCode === undefined) { groundDay.copy(DAY.ground); groundNight.copy(NIGHT.ground); }
+      else { groundDay.setHex(Models.colorHex(groundCode)); groundNight.copy(groundDay).multiplyScalar(0.42).lerp(NIGHT.ground, 0.35); }
+      groundMat.color.copy(groundDay).lerp(groundNight, night);
+    }
+
     // stars for the night
     const sp = [];
     for (let i = 0; i < 400; i++) { const a = Math.random() * 6.283, e = 0.12 + Math.random() * 1.2, R = 70; sp.push(Math.cos(a) * Math.cos(e) * R, Math.sin(e) * R, Math.sin(a) * Math.cos(e) * R); }
@@ -87,8 +117,9 @@
         if (it.id === popId) rec.obj.userData.pop = 1;
       });
       live.forEach((rec, id) => { if (!seen.has(id)) { objects.remove(rec.obj); live.delete(id); } });
+      syncFloor(v);
       const roads = v.items.filter(i => i.kind === 'road');
-      const sig = roads.map(r => r.x + ',' + r.z).sort().join(';');
+      const sig = roads.map(r => r.x + ',' + r.z + (r.paint ? ':' + r.paint[0] : '')).sort().join(';');
       if (sig !== roadSig) { roadSig = sig; buildRoads(v, roads); }
     }
 
@@ -115,7 +146,7 @@
       const edges = [], dashes = [];
       roads.forEach(r => {
         const cx = r.x + 0.5 - HALF, cz = r.z + 0.5 - HALF, y = 0.025;
-        const t = new THREE.Mesh(tileGeo, roadMat); t.position.set(cx, 0.012, cz); roadGroup.add(t);
+        const t = new THREE.Mesh(tileGeo, r.paint && r.paint[0] !== undefined ? Models.paintMat(r.paint[0], 'fill') : roadMat); t.position.set(cx, 0.012, cz); roadGroup.add(t);
         const m = Roads.mask(v, r.x, r.z, occ);
         const s = 0.5;
         // N, E, S, W sides
@@ -188,6 +219,15 @@
       return h ? { itemId: h.object.userData.itemId, idx: h.object.userData.paintIdx, base: h.object.userData.paintBase } : null;
     }
 
+    // the round land outside the board
+    function hitsGround(cx, cy) {
+      aim(cx, cy);
+      const o = ray.ray.origin, d = ray.ray.direction;
+      if (Math.abs(d.y) < 1e-6) return false;
+      const t = (-0.02 - o.y) / d.y; if (t < 0) return false;
+      return Math.hypot(o.x + d.x * t, o.z + d.z * t) < 34;
+    }
+
     // ---- cars for the appreciate mode
     const cars = [];
     function makeCar() {
@@ -241,7 +281,8 @@
       M.fill.color.copy(mix('fill'));
       [M.line, M.blue, M.flag, dashMat, gridMat].forEach(m => m.color.copy(mix('line')));
       M.soft.color.copy(mix('soft')); M.win.color.copy(mix('win')); M.lamp.color.copy(mix('lamp'));
-      groundMat.color.copy(mix('ground')); boardMat.color.copy(mix('board')); roadMat.color.copy(mix('road'));
+      groundMat.color.copy(groundDay).lerp(groundNight, t);
+      floorMat.color.setRGB(1, 1, 1).lerp(tmpC.setRGB(0.4, 0.45, 0.62), t); boardMat.color.copy(mix('board')); roadMat.color.copy(mix('road'));
       hemi.intensity = 0.75 - 0.35 * t; sun.intensity = 0.45 - 0.3 * t;
       starMat.opacity = t;
       Models.setPaintNight(t);
@@ -306,7 +347,7 @@
 
     const clock = new THREE.Clock();
     if (opts.grid === false) grid.visible = false;
-    const api = { renderer, scene, camera, controls, sync, setGhost, setSelected, pickCell, pickItemId, pickPart, paintParts, setNight, startCars, stopCars, thumbnail, addMarker, clearMarkers, resize, setInsets, grid, paused: false, get night() { return night; }, onFrame: null };
+    const api = { renderer, scene, camera, controls, sync, setGhost, setSelected, pickCell, pickItemId, pickPart, paintParts, hitsGround, setNight, startCars, stopCars, thumbnail, addMarker, clearMarkers, resize, setInsets, grid, paused: false, get night() { return night; }, onFrame: null };
     (function tick() {
       requestAnimationFrame(tick);
       if (api.paused) { clock.getDelta(); return; }

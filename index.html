@@ -127,8 +127,18 @@
   /* paint mode: the drawer becomes a colour palette */
   body.coloring .drawer-top, body.coloring .cards { display: none; }
   body:not(.coloring) .palette { display: none; }
-  .palette { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  .sw { width: 44px; height: 44px; padding: 0; border-radius: 50%; border: 3px solid var(--card); box-shadow: 0 0 0 2px var(--blue); background: var(--c); flex: none; }
+  .palette { display: grid; gap: 6px; min-width: 0; }
+  .strip { display: grid; grid-template-columns: repeat(16, 1fr); border: 2px solid var(--blue); border-radius: 10px; overflow: hidden; }
+  .seg { height: 32px; min-width: 0; padding: 0; border: 0; border-radius: 0; background: var(--c); }
+  .seg:hover:not(:disabled) { background: var(--c); }
+  .seg[aria-pressed="true"] { box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 5px var(--blue-deep); position: relative; z-index: 1; }
+  .tools-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .tools-row .grow { flex: 1; }
+  .cur { width: 34px; height: 34px; border-radius: 10px; background: var(--c); border: 2px solid var(--blue); flex: none; }
+  .mini { width: 38px; height: 34px; padding: 0; display: grid; place-items: center; border-radius: 10px; flex: none; }
+  .mini svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .hint .dot { display: inline-block; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--blue); vertical-align: -2px; margin-right: 5px; }
+  .sw { width: 32px; height: 32px; padding: 0; border-radius: 50%; border: 3px solid var(--card); box-shadow: 0 0 0 2px var(--blue); background: var(--c); flex: none; }
   .sw:hover:not(:disabled) { background: var(--c); }
   .sw[aria-checked="true"] { box-shadow: 0 0 0 3px var(--blue-deep), 0 0 0 6px var(--card); transform: scale(1.08); }
   .sw.white { background: #fff; display: grid; place-items: center; color: var(--blue); font-size: 12px; }
@@ -159,11 +169,11 @@
     .pick img { width: 44px; height: 44px; }
     .pick small { font-size: 12px; }
     .ib { width: 36px; height: 36px; }
-    .palette { flex-wrap: nowrap; overflow-x: auto; gap: 7px; padding: 4px 2px; scrollbar-width: none; }
-    .palette::-webkit-scrollbar { display: none; }
-    .sw { width: 31px; height: 31px; border-width: 2px; }
-    .sw.white { font-size: 10px; }
-    .palette { gap: 5px; justify-content: space-between; }
+    .palette { gap: 5px; }
+    .seg { height: 30px; }
+    .sw { width: 28px; height: 28px; border-width: 2px; }
+    .tools-row { gap: 5px; }
+    .cur { width: 30px; height: 30px; }
     .spot-bar .lbl-s { display: none; }
     .spot-bar button { padding: 4px 9px; }
 
