@@ -1,7 +1,24 @@
 // PWA extras: offline service worker, "install as app" and "share" in the ⋯ menu.
 (function () {
+  // Auto-update: check for a new version on every launch and whenever the app comes back to the front.
+  // When a new service worker takes over, reload once so the new layout and code apply right away.
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => { /* offline support unavailable */ }));
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController || reloaded) return; // first install: nothing old to replace
+      reloaded = true;
+      try { sessionStorage.setItem('bv-updated', '1'); } catch (e) { /* ignore */ }
+      location.reload();
+    });
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
+        const check = () => reg.update().catch(() => { /* offline */ });
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+        setInterval(check, 60 * 60 * 1000);
+        if (reg.waiting) reg.waiting.postMessage('skipWaiting');
+      }).catch(() => { /* offline support unavailable */ });
+    });
   }
   const pop = document.getElementById('menuPop');
   if (!pop) return;
@@ -17,6 +34,7 @@
     pop.prepend(b); return b;
   }
   const url = () => location.href.split('#')[0];
+  try { if (sessionStorage.getItem('bv-updated')) { sessionStorage.removeItem('bv-updated'); setTimeout(() => toast('새 버전으로 바뀌었어요'), 600); } } catch (e) { /* ignore */ }
 
   item('공유하기', async () => {
     const data = { title: '파란 선 마을', text: '파란 선 집으로 마을을 짓고 틀린 그림 찾기를 해 봐요!', url: url() };

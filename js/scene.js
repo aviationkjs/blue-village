@@ -15,7 +15,7 @@
     const controls = new THREE.OrbitControls(camera, canvas);
     controls.target.set(0, 0.8, 0);
     controls.enableDamping = true; controls.dampingFactor = 0.08;
-    controls.minDistance = 6; controls.maxDistance = 46;
+    controls.minDistance = 6; controls.maxDistance = 60;
     controls.maxPolarAngle = Math.PI * 0.46;
     controls.autoRotateSpeed = 0.5;
 
@@ -248,16 +248,33 @@
       return thumbR.domElement.toDataURL('image/png');
     }
 
+    // insets: pixels covered by the top bar / bottom drawer, so the board centres in the free space
+    const inset = { top: 0, bottom: 0 };
     function resize() {
       const w = canvas.clientWidth, h = canvas.clientHeight;
+      if (!w || !h) return;
       renderer.setSize(w, h, false);
-      camera.aspect = w / h; camera.fov = w < 600 ? 52 : 40; camera.updateProjectionMatrix();
+      camera.aspect = w / h;
+      camera.fov = w / h < 0.8 ? 62 : w < 600 ? 52 : 40;
+      const shift = Math.round((inset.bottom - inset.top) / 2);
+      if (shift) camera.setViewOffset(w, h, 0, shift, w, h); else camera.clearViewOffset();
+      camera.updateProjectionMatrix();
+    }
+    function setInsets(top, bottom) {
+      top = Math.max(0, top || 0); bottom = Math.max(0, bottom || 0);
+      if (Math.abs(top - inset.top) < 1 && Math.abs(bottom - inset.bottom) < 1) return;
+      inset.top = top; inset.bottom = bottom; resize();
     }
     window.addEventListener('resize', resize); resize();
+    // tall phone screens: start further back so the whole board fits across
+    if (opts.grid !== false && canvas.clientWidth / canvas.clientHeight < 0.8) {
+      camera.position.sub(controls.target).multiplyScalar(1.6).add(controls.target);
+      controls.update();
+    }
 
     const clock = new THREE.Clock();
     if (opts.grid === false) grid.visible = false;
-    const api = { renderer, scene, camera, controls, sync, setGhost, setSelected, pickCell, pickItemId, setNight, startCars, stopCars, thumbnail, addMarker, clearMarkers, resize, grid, paused: false, get night() { return night; }, onFrame: null };
+    const api = { renderer, scene, camera, controls, sync, setGhost, setSelected, pickCell, pickItemId, setNight, startCars, stopCars, thumbnail, addMarker, clearMarkers, resize, setInsets, grid, paused: false, get night() { return night; }, onFrame: null };
     (function tick() {
       requestAnimationFrame(tick);
       if (api.paused) { clock.getDelta(); return; }

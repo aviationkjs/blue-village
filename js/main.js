@@ -56,7 +56,7 @@
   // ---------- hint strip
   function btn(label, fn, cls) { const b = document.createElement('button'); b.type = 'button'; b.textContent = label; if (cls) b.className = cls; b.addEventListener('click', fn); return b; }
   function renderHint() {
-    const el = $('hint'); el.replaceChildren();
+    const el = $('hint'); el.replaceChildren(); el.classList.remove('idle');
     const text = document.createElement('span'); el.append(text);
     const it = selItem();
     const strong = s => { const b = document.createElement('b'); b.textContent = s; return b; };
@@ -79,6 +79,7 @@
       el.append(btn('지우기', deleteSel, 'danger'), btn('닫기', () => select(null)));
     } else {
       text.textContent = '분류를 고르고 카드를 눌러 마을에 놓아 보세요. 놓인 건물을 누르면 고칠 수 있어요.';
+      el.classList.add('idle'); // phones hide this strip to keep the board free
     }
   }
 
@@ -104,7 +105,7 @@
     const box = $('tabs'); box.replaceChildren();
     Cats.CATS.forEach(c => {
       const n = (c.houses || []).length + (c.models || []).length + (c.deco || []).length;
-      const b = btn(c.name, () => { st.cat = c.id; renderTabs(); renderCards(); });
+      const b = btn(c.name, () => { st.cat = c.id; setFold(false); renderTabs(); renderCards(); $('cards').scrollLeft = 0; });
       b.setAttribute('role', 'tab');
       b.setAttribute('aria-pressed', String(st.cat === c.id));
       b.setAttribute('aria-selected', String(st.cat === c.id));
@@ -242,6 +243,32 @@
   canvas.addEventListener('pointercancel', () => { if (stroke) { h.record(stroke.before); stroke = null; changed(); } down = null; });
   canvas.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && st.mode === 'place') scene.setGhost(null); });
 
+  // ---------- fold the card row (phones: gives the board most of the screen)
+  const FOLD = 'bv-fold';
+  function setFold(f) {
+    $('drawer').classList.toggle('folded', f);
+    $('bFold').setAttribute('aria-expanded', String(!f));
+    const l = f ? '카드 펼치기' : '카드 접기';
+    $('bFold').setAttribute('aria-label', l); $('bFold').title = l;
+    store.set(FOLD, f ? '1' : '0');
+  }
+  $('bFold').addEventListener('click', () => setFold(!$('drawer').classList.contains('folded')));
+  setFold(store.get(FOLD) === '1');
+
+  // keep the board centred in the space the bars leave free
+  function fitInsets() {
+    if (!scene) return;
+    const top = document.body.classList.contains('appreciate') ? 0 : document.querySelector('header').getBoundingClientRect().bottom;
+    const b = document.querySelector('.bottom');
+    const bottom = document.body.classList.contains('appreciate') ? 0 : window.innerHeight - b.getBoundingClientRect().top;
+    scene.setInsets(top, bottom);
+  }
+  if ('ResizeObserver' in window) {
+    const ro = new ResizeObserver(fitInsets);
+    ro.observe(document.querySelector('header')); ro.observe(document.querySelector('.bottom'));
+  }
+  window.addEventListener('resize', fitInsets);
+
   // ---------- toolbar
   function undo() { if (h.undo()) { changed(); renderHint(); } }
   function redo() { if (h.redo()) { changed(); renderHint(); } }
@@ -262,12 +289,14 @@
   $('bNight').addEventListener('click', () => {
     st.nightTarget = st.nightTarget ? 0 : 1;
     $('bNight').setAttribute('aria-pressed', String(!!st.nightTarget));
-    $('bNight').textContent = st.nightTarget ? '낮' : '밤';
+    const lbl = st.nightTarget ? '낮' : '밤';
+    $('bNight').querySelector('.lbl').textContent = lbl;
+    $('bNight').setAttribute('aria-label', lbl); $('bNight').title = lbl;
   });
   function enterView() {
     cancel(); select(null);
     st.viewing = true; st.phase = st.nightTarget ? 0.5 : 0;
-    document.body.classList.add('appreciate');
+    document.body.classList.add('appreciate'); fitInsets();
     scene.grid.visible = false;
     scene.controls.autoRotate = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     scene.startCars();
@@ -275,7 +304,7 @@
   function exitView() {
     if (!st.viewing) return;
     st.viewing = false;
-    document.body.classList.remove('appreciate');
+    document.body.classList.remove('appreciate'); fitInsets();
     scene.grid.visible = true; scene.controls.autoRotate = false; scene.stopCars();
   }
   $('bView').addEventListener('click', enterView);
@@ -402,6 +431,7 @@
       }
     };
     changed(); renderHint(); renderTabs(); renderCards();
+    fitInsets();
     $('loading').remove();
   }
   // card pictures come from the drawing sheet; the game still works if it fails to load
