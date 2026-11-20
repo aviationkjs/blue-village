@@ -618,6 +618,48 @@
     $('bNight').setAttribute('aria-expanded', String(!p.hidden));
   });
   document.addEventListener('pointerdown', e => { const p = $('skyPop'); if (!p.hidden && !e.target.closest('#skyPop, #bNight')) p.hidden = true; });
+  // ---------- music for the appreciate view ("시골 마을의 노을", looped)
+  const MUSIC_KEY = 'bv-music-v1', MUSIC_SRC = 'assets/music.mp3', MUSIC_VOL = 0.6;
+  const music = { el: new Audio(), on: store.get(MUSIC_KEY) !== 'off', fade: 0 };
+  music.el.loop = true; music.el.preload = 'auto'; music.el.volume = 0;
+  // load it as a blob up front so the tap on [감상] can start it at once (also offline via the app cache)
+  fetch(MUSIC_SRC).then(r => (r.ok ? r.blob() : Promise.reject(r.status)))
+    .then(b => { if (!music.el.src) music.el.src = URL.createObjectURL(b); })
+    .catch(() => { /* falls back to streaming the file when played */ });
+  function fadeTo(target, ms, done) {
+    clearInterval(music.fade);
+    const from = music.el.volume, t0 = performance.now();
+    music.fade = setInterval(() => {
+      const k = Math.min(1, (performance.now() - t0) / ms);
+      music.el.volume = from + (target - from) * k;
+      if (k >= 1) { clearInterval(music.fade); if (done) done(); }
+    }, 40);
+  }
+  function musicPlay() {
+    if (!music.on) return;
+    if (!music.el.src) music.el.src = MUSIC_SRC;
+    const p = music.el.play();
+    if (p) p.catch(() => toast('음악을 틀지 못했어요. [음악 켜기]를 눌러 주세요'));
+    fadeTo(MUSIC_VOL, 1500);
+  }
+  function musicStop() { fadeTo(0, 700, () => music.el.pause()); }
+  function renderMusicBtn() {
+    const b = $('bMusic');
+    b.textContent = music.on ? '음악 끄기' : '음악 켜기';
+    b.setAttribute('aria-pressed', String(music.on));
+  }
+  $('bMusic').addEventListener('click', () => {
+    music.on = !music.on;
+    store.set(MUSIC_KEY, music.on ? 'on' : 'off');
+    renderMusicBtn();
+    if (music.on) musicPlay(); else musicStop();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (!st.viewing || !music.on) return;
+    if (document.hidden) music.el.pause(); else music.el.play().catch(() => {});
+  });
+  renderMusicBtn();
+
   function enterView() {
     cancel(); select(null);
     st.viewing = true; st.phase = st.nightTarget ? 0.5 : 0;
@@ -625,12 +667,14 @@
     scene.grid.visible = false;
     scene.controls.autoRotate = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     scene.startCars();
+    musicPlay();
   }
   function exitView() {
     if (!st.viewing) return;
     st.viewing = false;
     document.body.classList.remove('appreciate'); fitInsets();
     scene.grid.visible = true; scene.controls.autoRotate = false; scene.stopCars();
+    musicStop();
   }
   $('bView').addEventListener('click', enterView);
   $('bPaint').addEventListener('click', () => { if (st.mode === 'color') cancel(); else { select(null, true); st.spec = null; setMode('color'); } });

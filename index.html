@@ -61,6 +61,7 @@
   .menu { position: relative; }
   .menu-pop { position: absolute; right: 0; top: calc(100% + 6px); background: var(--card); border: 2px solid var(--blue); border-radius: 14px; padding: 8px; display: grid; gap: 6px; min-width: 210px; z-index: 5; }
   .menu-pop button { border-radius: 10px; text-align: left; }
+  .menu-link { font: 400 15px var(--font-display); color: var(--blue); border: 2px solid var(--blue); border-radius: 10px; padding: 6px 12px; text-decoration: none; background: var(--card); }
 
   .bottom {
     position: fixed; left: 0; right: 0; bottom: 0;
@@ -81,9 +82,9 @@
   .pick img { width: 58px; height: 58px; object-fit: contain; pointer-events: none; }
   .pick small { font: 400 13px var(--font-display); }
 
-  #exitView { position: fixed; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); }
+  .view-bar { position: fixed; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); display: flex; gap: 8px; }
   body.appreciate header, body.appreciate .bottom { display: none; }
-  body:not(.appreciate) #exitView { display: none; }
+  body:not(.appreciate) .view-bar { display: none; }
 
   #toast { position: fixed; top: calc(64px + env(safe-area-inset-top, 0px)); left: 50%; transform: translate(-50%, -8px); background: var(--blue-deep); color: var(--paper); font: 400 15px var(--font-display); padding: 7px 16px; border-radius: 999px; opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; max-width: calc(100% - 32px); text-align: center; z-index: 30; }
   #toast.show { opacity: 1; transform: translate(-50%, 0); }
@@ -320,7 +321,10 @@
   </div>
 </div>
 
-<button id="exitView" type="button">감상 끝내기</button>
+<div class="view-bar">
+  <button id="bMusic" type="button" aria-pressed="true">음악 끄기</button>
+  <button id="exitView" type="button">감상 끝내기</button>
+</div>
 
 <div id="spot" hidden>
   <div class="spot-bar">
