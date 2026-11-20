@@ -1,6 +1,22 @@
 // Wires the village state, the scene and the on-screen controls together.
 (function () {
+  // An update can leave an old page (index.html) cached next to this newer script. Then the
+  // buttons this script expects are missing: fetch the page fresh once instead of hanging.
+  if (['bSlots', 'wallDlg', 'photoDlg', 'palette', 'drawer', 'bPaint'].some(id => !document.getElementById(id))) {
+    let tried = false; try { tried = sessionStorage.getItem('bv-mismatch') === '1'; sessionStorage.setItem('bv-mismatch', '1'); } catch (e) { tried = true; }
+    const go = () => { location.replace(location.pathname + '?v=' + Date.now()); };
+    if (!tried && window.caches) caches.keys().then(k => Promise.all(k.map(n => caches.delete(n)))).then(go, go);
+    else if (!tried) go();
+    else {
+      const el = document.getElementById('loading');
+      if (el) el.textContent = '새 버전을 받는 중이에요. 잠시 뒤 앱을 닫았다 다시 열어 주세요.';
+    }
+    return;
+  }
+  try { sessionStorage.removeItem('bv-mismatch'); } catch (e) { /* ignore */ }
   const { Grid: G, Roads: R, Decorate: D, Spot, Cats, Sheet, Models, Scene } = window.BV;
+  // statues need photo.js; if an old cached page did not load it, the game still starts without them
+  const Statues = window.BV.Statues || { list: () => [], get: () => null, add: () => null };
   // villages: one storage key per village; the first village keeps the original key
   const SLOTS = 'bv-slots', CUR = 'bv-slot-cur';
   const keyOf = id => id === 'v1' ? 'bv-village-v1' : 'bv-village-' + id;
@@ -126,7 +142,7 @@
     (c.houses || []).forEach(i => out.push({ kind: 'house', ref: String(i), name: '집 ' + (i + 1), img: houses[i] ? houses[i].thumb : thumb('house', String(i)) }));
     if (c.statues) {
       out.push({ kind: 'photo', ref: 'photo', name: '사진으로', img: ICONS.camera });
-      BV.Statues.list().forEach(([id, rec]) => out.push({ kind: 'statue', ref: id, name: '동상', img: rec.preview }));
+      Statues.list().forEach(([id, rec]) => out.push({ kind: 'statue', ref: id, name: '동상', img: rec.preview }));
     }
     (c.models || []).forEach(r => out.push({ kind: 'model', ref: r, name: Models.NAMES[r], img: thumb('model', r) }));
     (c.deco || []).forEach(r => out.push(r === 'road' ? { kind: 'road', ref: 'road', name: '길', img: ICONS.road }
@@ -137,7 +153,7 @@
   function renderTabs() {
     const box = $('tabs'); box.replaceChildren();
     Cats.CATS.forEach(c => {
-      const n = (c.houses || []).length + (c.models || []).length + (c.deco || []).length + (c.statues ? BV.Statues.list().length : 0);
+      const n = (c.houses || []).length + (c.models || []).length + (c.deco || []).length + (c.statues ? Statues.list().length : 0);
       const b = btn(c.name, () => { st.cat = c.id; setFold(false); renderTabs(); renderCards(); $('cards').scrollLeft = 0; });
       b.setAttribute('role', 'tab');
       b.setAttribute('aria-pressed', String(st.cat === c.id));
@@ -723,7 +739,7 @@
     const small = document.createElement('canvas'); const k = 96 / Math.max(photoArt.w, photoArt.h);
     small.width = Math.round(photoArt.w * k); small.height = Math.round(photoArt.h * k);
     small.getContext('2d').drawImage(photoArt.preview, 0, 0, small.width, small.height);
-    const id = BV.Statues.add({ mask: photoArt.mask.toDataURL('image/png'), preview: small.toDataURL('image/png'), w: photoArt.w, h: photoArt.h });
+    const id = Statues.add({ mask: photoArt.mask.toDataURL('image/png'), preview: small.toDataURL('image/png'), w: photoArt.w, h: photoArt.h });
     if (!id) { toast('저장 공간이 모자라요. 안 쓰는 동상이나 마을을 지워 주세요'); return; }
     closeDlg('photoDlg');
     st.cat = 'statue'; renderTabs(); renderCards();

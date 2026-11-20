@@ -306,6 +306,28 @@
 
 <div id="toast"></div>
 <div id="loading">마을을 준비하는 중…</div>
+<script>
+  // If the game cannot start (for example a half-finished update left old and new files mixed),
+  // show a way out instead of an endless loading screen: clear the offline copy and load fresh.
+  (function () {
+    function rescue(why) {
+      var el = document.getElementById('loading'); if (!el || el.dataset.rescue) return;
+      el.dataset.rescue = '1';
+      el.innerHTML = '<div style="display:grid;gap:12px;justify-items:center;text-align:center;padding:24px">' +
+        '<div>마을을 여는 중에 문제가 생겼어요</div>' +
+        '<small style="font-family:system-ui;opacity:.7;max-width:280px">' + String(why || '').slice(0, 120).replace(/[<>&]/g, '') + '</small>' +
+        '<button id="rescueBtn" type="button" class="primary">새로 받아서 다시 열기</button></div>';
+      document.getElementById('rescueBtn').onclick = function () {
+        var jobs = [];
+        try { if (window.caches) jobs.push(caches.keys().then(function (k) { return Promise.all(k.map(function (n) { return caches.delete(n); })); })); } catch (e) {}
+        try { if (navigator.serviceWorker) jobs.push(navigator.serviceWorker.getRegistrations().then(function (r) { return Promise.all(r.map(function (x) { return x.unregister(); })); })); } catch (e) {}
+        Promise.all(jobs).catch(function () {}).then(function () { location.reload(); });
+      };
+    }
+    window.addEventListener('error', function (e) { if (document.getElementById('loading')) rescue(e.message); });
+    setTimeout(function () { if (document.getElementById('loading')) rescue('시간이 너무 오래 걸려요'); }, 15000);
+  })();
+</script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
