@@ -10,6 +10,8 @@
     { id: 'landmark', name: '랜드마크', models: ['windmill', 'lighthouse', 'clockTower', 'ferrisWheel', 'waterwheel', 'observatory', 'station', 'treehouse', 'pavilion', 'church', 'balloon', 'gate'] },
     { id: 'special', name: '특별한 건물', houses: [23, 37, 44], models: ['tower', 'castle', 'cottage', 'tripleGable', 'greenhouse', 'storeBox'] },
     { id: 'shop', name: '마을 가게', models: ['bakery', 'flowerShop', 'cafe', 'bookstore', 'postOffice', 'iceCream', 'market', 'library'] },
+    { id: 'theme', name: '테마파크', models: ['coaster', 'dropTower', 'viking', 'swingRide', 'bigWheel', 'spaceRide', 'logFlume', 'obsTower', 'carousel'], deco: ['mono'] },
+    { id: 'parkProps', name: '파크 소품', models: ['parkArch'], deco: ['ticketBooth', 'cottonCandy', 'balloonStand', 'stringLights', 'parkFence', 'queueRail'] },
     { id: 'park', name: '공원', models: ['fountain', 'pond', 'bridge', 'playground'], deco: ['bench', 'flowers'] },
     { id: 'farm', name: '숲과 농장', models: ['waterfall', 'field', 'hill'], deco: ['cherry', 'bamboo', 'fruitTree', 'sunflowers', 'beehive', 'rock'] },
     { id: 'rest', name: '쉼터', models: ['hammock', 'tent', 'footbath', 'clothesline'], deco: ['campfire', 'picnic', 'treeSwing', 'flowerArch', 'mailbox'] },

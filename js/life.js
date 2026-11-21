@@ -143,8 +143,8 @@
       });
       birds.forEach(b => {
         b.g.visible = night < 0.5;
-        const a = t * 0.12 + b.k * 0.07, r = 11 + (b.k % 2) * 0.6;
-        b.g.position.set(Math.cos(a) * r - (b.k % 3) * 0.4, 8 + Math.sin(t * 0.5 + b.k) * 0.3 + b.k * 0.15, Math.sin(a) * r);
+        const a = t * 0.1 + b.k * 0.06, r = 16 + (b.k % 2) * 0.8;
+        b.g.position.set(Math.cos(a) * r - (b.k % 3) * 0.4, 14 + Math.sin(t * 0.5 + b.k) * 0.4 + b.k * 0.2, Math.sin(a) * r);
         b.g.rotation.y = -a;
         const flap = Math.sin(t * 6 + b.k) * 0.5; b.g.userData.wings[0].rotation.x = flap; b.g.userData.wings[1].rotation.x = -flap;
       });

@@ -31,7 +31,7 @@
   const eul = w => w + (hasFinal(w) ? '을' : '를');
 
   function exampleVillage() {
-    const v = G.create();
+    const v = G.create(24); // laid out on the old board, then moved to the centre of the big one
     const P = (kind, ref, x, z, rot) => G.place(v, { kind, ref: String(ref), x, z, rot });
     for (let x = 2; x <= 21; x++) P('road', 'road', x, 8, 0);
     [[0, 3], [10, 6], [23, 13], [6, 16]].forEach(([r, x]) => P('house', r, x, 6, 0));
@@ -42,7 +42,7 @@
     P('house', 44, 5, 15, 1); P('house', 23, 19, 15, 3); P('house', 37, 4, 19, 1);
     R.autoConnect(v).forEach(([x, z]) => P('road', 'road', x, z, 0));
     D.plan(v, 7).forEach(d => G.place(v, d));
-    return v;
+    return G.grow(v);
   }
 
   let houses = [];
@@ -71,7 +71,7 @@
     if (wasRainbow === false && r) toast('🌈 무지개 마을이 되었어요!', true);
     wasRainbow = r;
   }
-  const TILE_NAMES = { road: '길', water: '개울', rail: '기찻길' };
+  const TILE_NAMES = { road: '길', water: '개울', rail: '기찻길', mono: '모노레일' };
   const nameOf = it => it.kind === 'statue' ? '동상' : it.kind === 'house' ? '집 ' + (+it.ref + 1) : it.kind === 'model' ? Models.NAMES[it.ref] : it.kind === 'road' ? (TILE_NAMES[it.ref] || '길') : (Models.DECO_NAMES[it.ref] || '꾸미기');
   const selItem = () => v.items.find(i => i.id === st.sel) || null;
 
@@ -134,6 +134,7 @@
   const ICONS = {
     road: svgIcon('<rect x="8" y="22" width="48" height="20" rx="3" fill="#d0defa"/><path d="M14 32h8M28 32h8M42 32h8"/>'),
     water: svgIcon('<path d="M6 26c8-6 14 6 22 0s14 6 22 0 8-2 8-2v18H6z" fill="#bcd7ff"/><path d="M12 34c5-3 8 3 13 0M34 38c5-3 8 3 13 0" stroke-width="2.5"/>'),
+    mono: svgIcon('<path d="M18 50V28M46 50V28" stroke-width="4"/><rect x="6" y="22" width="52" height="7" rx="2" fill="#dbe7fd"/><rect x="14" y="10" width="36" height="12" rx="6" fill="#4dabf7"/><path d="M20 15h24" stroke="#fff" stroke-width="2.5"/>'),
     rail: svgIcon('<rect x="8" y="22" width="48" height="20" rx="3" fill="#dfe5f1"/><path d="M14 20v24M24 20v24M34 20v24M44 20v24" stroke="#c9a27a" stroke-width="4"/><path d="M8 27h48M8 37h48"/>'),
     camera: svgIcon('<rect x="8" y="18" width="48" height="34" rx="6" fill="#fff"/><circle cx="32" cy="35" r="10"/><path d="M22 18l4-6h12l4 6"/><path d="M44 12l4 4M44 16l4-4" stroke-width="2"/>'),
     erase: svgIcon('<path d="M14 44l18-24 16 12-12 16H20z" fill="#fff"/><path d="M22 34l12 9M12 52h40"/>'),
@@ -1188,8 +1189,7 @@
 
   // ---------- start
   function start() {
-    scene = Scene.create(canvas);    if (window.BV.Life) scene.life = window.BV.Life.create(scene);
-    scene.onFrame = (dt) => {
+    scene = Scene.create(canvas);    if (window.BV.Life) scene.life = window.BV.Life.create(scene);    scene.onFrame = (dt) => {
       let target = st.nightTarget;
       if (st.viewing) { st.phase = (st.phase + dt / 60) % 1; target = 0.5 - 0.5 * Math.cos(st.phase * Math.PI * 2); }
       if (sky.weather === 'auto') {

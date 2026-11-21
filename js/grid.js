@@ -9,9 +9,26 @@
     bakery: [2, 2], flowerShop: [2, 2], cafe: [2, 2], bookstore: [2, 2], postOffice: [2, 2], iceCream: [2, 2], market: [3, 2], library: [3, 2],
     // nature, farm, resting places
     waterfall: [2, 2], field: [2, 2], hill: [2, 2], hammock: [2, 1], tent: [2, 2], footbath: [2, 2], clothesline: [2, 1],
+    // theme park
+    coaster: [6, 4], dropTower: [2, 2], viking: [4, 2], swingRide: [3, 3], bigWheel: [4, 2], spaceRide: [3, 3], logFlume: [5, 3],
+    obsTower: [2, 2], carousel: [3, 3], parkArch: [4, 1],
   };
 
-  function create(size = 24) { return { size, items: [], nextId: 1 }; }
+  // board size in cells; villages saved on the old 24x24 board are moved to the centre when loaded
+  const BOARD = 32;
+  function create(size = BOARD) { return { size, items: [], nextId: 1 }; }
+  function grow(v, size = BOARD) {
+    if (!v || v.size >= size) return v;
+    const off = Math.floor((size - v.size) / 2);
+    v.items.forEach(i => { i.x += off; i.z += off; });
+    if (v.floor) {
+      const f = {};
+      Object.keys(v.floor).forEach(k => { const [x, z] = k.split(',').map(Number); f[(x + off) + ',' + (z + off)] = v.floor[k]; });
+      v.floor = f;
+    }
+    v.size = size;
+    return v;
+  }
 
   function footprint(kind, ref) {
     if (kind === 'house' || kind === 'statue') return [2, 2];
@@ -115,7 +132,7 @@
         if (Object.keys(f).length) out.floor = f;
       }
       if (Number.isInteger(o.ground)) out.ground = o.ground;
-      return out;
+      return grow(out);
     } catch (e) { return null; }
   }
 
@@ -160,7 +177,7 @@
     reset() { this.past = []; this.future = []; }
   }
 
-  const api = { MODEL_FP, create, footprint, sized, canPlace, place, remove, move, rotate, itemAt, frontCell, serialize, deserialize, History };
+  const api = { BOARD, grow, MODEL_FP, create, footprint, sized, canPlace, place, remove, move, rotate, itemAt, frontCell, serialize, deserialize, History };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else { root.BV = root.BV || {}; root.BV.Grid = api; }
 })(this);

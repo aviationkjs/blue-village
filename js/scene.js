@@ -4,18 +4,18 @@
   const { M, DAY, NIGHT } = Models;
 
   function create(canvas, opts = {}) {
-    const SIZE = 24, HALF = SIZE / 2;
+    const SIZE = root.BV.Grid.BOARD, HALF = SIZE / 2, LAND = HALF * 2.9; // round land around the board
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     const scene = new THREE.Scene();
     scene.background = DAY.bg.clone();
-    scene.fog = new THREE.Fog(DAY.bg.clone(), 45, 80);
-    const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 200);
-    camera.position.set(17, 16, 20);
+    scene.fog = new THREE.Fog(DAY.bg.clone(), 75, 150);
+    const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 320);
+    camera.position.set(31, 30, 37);
     const controls = new THREE.OrbitControls(camera, canvas);
-    controls.target.set(0, 0.8, 0);
+    controls.target.set(0, 1.5, 0);
     controls.enableDamping = true; controls.dampingFactor = 0.08;
-    controls.minDistance = 6; controls.maxDistance = 60;
+    controls.minDistance = 6; controls.maxDistance = 110;
     controls.maxPolarAngle = Math.PI * 0.46;
     controls.autoRotateSpeed = 0.5;
 
@@ -28,7 +28,7 @@
     const dashMat = new THREE.LineDashedMaterial({ color: DAY.line, dashSize: 0.18, gapSize: 0.14 });
     const gridMat = new THREE.LineBasicMaterial({ color: DAY.line, transparent: true, opacity: 0.18 });
 
-    const ground = new THREE.Mesh(new THREE.CircleGeometry(34, 96), groundMat);
+    const ground = new THREE.Mesh(new THREE.CircleGeometry(LAND, 120), groundMat);
     ground.rotation.x = -Math.PI / 2; ground.position.y = -0.02; scene.add(ground);
     const board = new THREE.Mesh(new THREE.PlaneGeometry(SIZE, SIZE), boardMat);
     board.rotation.x = -Math.PI / 2; scene.add(board);
@@ -71,9 +71,9 @@
 
     // stars for the night
     const sp = [];
-    for (let i = 0; i < 400; i++) { const a = Math.random() * 6.283, e = 0.12 + Math.random() * 1.2, R = 70; sp.push(Math.cos(a) * Math.cos(e) * R, Math.sin(e) * R, Math.sin(a) * Math.cos(e) * R); }
+    for (let i = 0; i < 400; i++) { const a = Math.random() * 6.283, e = 0.12 + Math.random() * 1.2, R = 120; sp.push(Math.cos(a) * Math.cos(e) * R, Math.sin(e) * R, Math.sin(a) * Math.cos(e) * R); }
     const starGeo = new THREE.BufferGeometry(); starGeo.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3));
-    const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.35, transparent: true, opacity: 0, fog: false });
+    const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.55, transparent: true, opacity: 0, fog: false });
     scene.add(new THREE.Points(starGeo, starMat));
 
     function buildObject(it) {
@@ -155,7 +155,8 @@
 
     const tileGeo = new THREE.PlaneGeometry(1, 1); tileGeo.rotateX(-Math.PI / 2);
     // tiles: kind 'road' with ref 'road' | 'water' (creek) | 'rail'
-    let railCells = new Set(), waterCells = new Set();
+    let railCells = new Set(), waterCells = new Set(), monoCells = new Set();
+    const MONO_Y = 4.2; // monorail beam height
     const railBedMat = new THREE.MeshLambertMaterial({ color: 0xdfe5f1 });
     const waveMat = new THREE.LineBasicMaterial({ color: 0x5b93ec, transparent: true, opacity: 0.85 });
     let waves = null;
@@ -163,10 +164,10 @@
     function lineSegs(arr, mat) { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3)); return new THREE.LineSegments(g, mat); }
     function buildRoads(v, roads) {
       roadGroup.clear();
-      const by = { road: [], water: [], rail: [] };
+      const by = { road: [], water: [], rail: [], mono: [] };
       roads.forEach(r => (by[Roads.tileRef(r)] || by.road).push(r));
       const keyset = list => new Set(list.map(r => r.x + ',' + r.z));
-      roadCells = keyset(by.road); waterCells = keyset(by.water); railCells = keyset(by.rail);
+      roadCells = keyset(by.road); waterCells = keyset(by.water); railCells = keyset(by.rail); monoCells = keyset(by.mono);
       const occ = Roads.occupancy(v);
       const s = 0.5, y = 0.025;
       const tile = (r, mat, yy = 0.012) => { const t = new THREE.Mesh(tileGeo, r.paint && r.paint[0] !== undefined ? Models.paintMat(r.paint[0], 'fill') : mat); t.position.set(r.x + 0.5 - HALF, yy, r.z + 0.5 - HALF); roadGroup.add(t); };
@@ -201,6 +202,19 @@
           [-0.17, 0.17].forEach(o => Models.bar(roadGroup, dx ? 0.5 : 0.035, 0.04, dz ? 0.5 : 0.035, cx + dx * 0.25 + (dz ? o : 0), 0.06, cz + dz * 0.25 + (dx ? o : 0)));
         });
         outline(r, m, edges);
+      });
+      // monorail: a pillar on every tile and a beam up high toward each joined side
+      by.mono.forEach(r => {
+        const m = Roads.mask(v, r.x, r.z, occ, 'mono'), cx = r.x + 0.5 - HALF, cz = r.z + 0.5 - HALF;
+        // a pillar at corners and ends, and on every other tile of a straight run
+        const straight = m === 5 || m === 10;
+        if (!straight || (r.x + r.z) % 2 === 0) {
+          Models.part(new THREE.CylinderGeometry(0.06, 0.1, MONO_Y - 0.1, 8), roadGroup, cx, (MONO_Y - 0.1) / 2, cz);
+          Models.part(new THREE.CylinderGeometry(0.18, 0.18, 0.05, 12), roadGroup, cx, 0.03, cz);
+        }
+        let sides = SIDES.filter(([bit]) => m & bit);
+        if (!sides.length) sides = [SIDES[1], SIDES[3]];
+        sides.forEach(([, dx, dz]) => Models.part(Models.box(dx ? 0.52 : 0.26, 0.2, dz ? 0.52 : 0.26), roadGroup, cx + dx * 0.24, MONO_Y, cz + dz * 0.24));
       });
       roadGroup.add(lineSegs(edges, M.line));
       const dl = lineSegs(dashes, dashMat); dl.computeLineDistances(); roadGroup.add(dl);
@@ -273,7 +287,7 @@
       const o = ray.ray.origin, d = ray.ray.direction;
       if (Math.abs(d.y) < 1e-6) return false;
       const t = (-0.02 - o.y) / d.y; if (t < 0) return false;
-      return Math.hypot(o.x + d.x * t, o.z + d.z * t) < 34;
+      return Math.hypot(o.x + d.x * t, o.z + d.z * t) < LAND;
     }
 
 
@@ -301,7 +315,7 @@
     // ---- weather: rain streaks, snowflakes, a rainbow that stays behind the village from where you look
     let weather = 'clear';
     const weatherGroup = new THREE.Group(); scene.add(weatherGroup);
-    const RAIN_N = 1400, SNOW_N = 900, SPAN = 30, TOPY = 16;
+    const RAIN_N = 2200, SNOW_N = 1400, SPAN = 42, TOPY = 22;
     const rainPos = new Float32Array(RAIN_N * 6);
     const rainGeo = new THREE.BufferGeometry(); rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
     const rainMat = new THREE.LineBasicMaterial({ color: 0x7fa6e8, transparent: true, opacity: 0.55, fog: false });
@@ -316,7 +330,7 @@
     const snow = new THREE.Points(snowGeo, snowMat); snow.frustumCulled = false; snow.visible = false; weatherGroup.add(snow);
     const rainbow = new THREE.Group(); rainbow.visible = false; scene.add(rainbow);
     [0xff6b6b, 0xffa94d, 0xffd43b, 0x69db7c, 0x4dabf7, 0x5c7cfa, 0xb197fc].forEach((c, i) => {
-      const m = new THREE.Mesh(new THREE.TorusGeometry(26 - i * 0.9, 0.45, 8, 64, Math.PI), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.55, fog: false, depthWrite: false }));
+      const m = new THREE.Mesh(new THREE.TorusGeometry(36 - i * 1.2, 0.6, 8, 64, Math.PI), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.55, fog: false, depthWrite: false }));
       rainbow.add(m);
     });
     function setWeather(w) {
@@ -344,7 +358,7 @@
       if (rainbow.visible) {
         // stand on the far side of the village from the camera, facing it
         const dx = camera.position.x - controls.target.x, dz = camera.position.z - controls.target.z, l = Math.hypot(dx, dz) || 1;
-        rainbow.position.set(controls.target.x - dx / l * 22, -4, controls.target.z - dz / l * 22);
+        rainbow.position.set(controls.target.x - dx / l * 30, -5, controls.target.z - dz / l * 30);
         rainbow.rotation.y = Math.atan2(dx, dz);
       }
     }
@@ -394,8 +408,7 @@
     }
 
     // ---- a little train on the rail tiles (runs whenever there is enough track)
-    const train = { g: null, wagons: [], from: null, to: null, t: 0, trail: [], smoke: null };
-    function makeTrainCar(engine, hue) {
+        function makeTrainCar(engine, hue) {
       const g = new THREE.Group();
       const body = Models.paintMat(Models.code(hue, 5), 'fill');
       Models.part(Models.box(0.5, 0.2, 0.3), g, 0, 0.2, 0, body);
@@ -410,48 +423,63 @@
       [-0.16, 0.16].forEach(x => [-0.12, 0.12].forEach(z => { const w = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.04, 10), M.blue); w.rotation.x = Math.PI / 2; w.position.set(x, 0.07, z); g.add(w); }));
       return g;
     }
-    const railNbrs = (x, z) => [[0, -1], [1, 0], [0, 1], [-1, 0]].map(([dx, dz]) => [x + dx, z + dz]).filter(([a, b]) => railCells.has(a + ',' + b));
-    function clearTrain() { if (train.g) { scene.remove(train.g); train.wagons.forEach(w => scene.remove(w)); } train.g = null; train.wagons = []; train.trail = []; }
-    function moveTrain(dt, t) {
-      const ok = c => c && railCells.has(c[0] + ',' + c[1]);
-      if (railCells.size < 4) { clearTrain(); return; }
-      if (!train.g || !ok(train.from) || !ok(train.to)) {
-        clearTrain();
-        const cells = [...railCells].map(k => k.split(',').map(Number)).filter(c => railNbrs(...c).length);
-        if (!cells.length) return;
-        train.from = cells[Math.floor(Math.random() * cells.length)];
-        train.to = railNbrs(...train.from)[0]; train.t = 0;
-        train.g = makeTrainCar(true, 0); scene.add(train.g);
-        train.wagons = [8, 3].map(h => { const w = makeTrainCar(false, h); scene.add(w); return w; });
-        train.smoke = Models.addSmoke(train.g, 0.15, 0.5, 0);
-        train.g.traverse(o => { if (o.userData.smoke) o.scale.multiplyScalar(0.4); });
-      }
-      train.t += dt * 1.1;
-      while (train.t >= 1) {
-        train.t -= 1;
-        const nb = railNbrs(...train.to);
-        const ahead = nb.filter(n => n[0] !== train.from[0] || n[1] !== train.from[1]);
-        // keep going straight when the track allows it
-        const dx = train.to[0] - train.from[0], dz = train.to[1] - train.from[1];
-        const straight = ahead.find(n => n[0] - train.to[0] === dx && n[1] - train.to[1] === dz);
-        const next = straight || ahead[Math.floor(Math.random() * ahead.length)] || train.from; // dead end: turn back
-        train.from = train.to; train.to = next;
-      }
-      const x = train.from[0] + (train.to[0] - train.from[0]) * train.t + 0.5 - HALF, z = train.from[1] + (train.to[1] - train.from[1]) * train.t + 0.5 - HALF;
-      const last = train.trail[train.trail.length - 1];
-      if (!last || Math.hypot(last.x - x, last.z - z) > 0.03) { train.trail.push({ x, z }); if (train.trail.length > 200) train.trail.shift(); }
-      const place = (obj, back) => {
-        let d = 0, i = train.trail.length - 1, p = { x, z }, q = p;
-        while (i > 0 && d < back) { q = train.trail[i - 1]; d += Math.hypot(p.x - q.x, p.z - q.z); p = q; i--; }
-        const a = train.trail[Math.max(0, i)], b = train.trail[Math.min(train.trail.length - 1, i + 3)] || a;
-        obj.position.set(p.x, 0.04, p.z);
-        if (a && b && (a.x !== b.x || a.z !== b.z)) obj.rotation.y = Math.atan2(-(b.z - a.z), b.x - a.x);
-      };
-      train.g.position.set(x, 0.04, z);
-      train.g.rotation.y = Math.atan2(-(train.to[1] - train.from[1]), train.to[0] - train.from[0]);
-      train.wagons.forEach((w, k) => place(w, 0.6 * (k + 1)));
-      if (train.smoke) train.smoke(t, dt, night);
+    // monorail pods sit on the high beam
+    function makeMonoCar(front, hue) {
+      const g = new THREE.Group();
+      const body = Models.part(Models.box(0.6, 0.26, 0.3), g, 0, 0.26, 0, Models.paintMat(Models.code(hue, 3), 'fill'));
+      void body;
+      const glass = new THREE.Mesh(Models.box(0.46, 0.08, 0.32), M.win); glass.position.y = 0.32; g.add(glass);
+      if (front) { const n = Models.part(new THREE.SphereGeometry(0.15, 10, 8), g, 0.3, 0.26, 0, Models.paintMat(Models.code(hue, 3), 'fill')); n.scale.set(0.8, 0.85, 1); }
+      return g;
     }
+    // a runner moves along connected tiles of one kind: keeps straight when it can, turns back at dead ends;
+    // the cars behind follow the leader's trail
+    function makeRunner({ cells, y, speed, minCells, build, smoke }) {
+      const r = { g: null, cars: [], from: null, to: null, t: 0, trail: [], smoke: null };
+      const nbrs = (x, z) => [[0, -1], [1, 0], [0, 1], [-1, 0]].map(([dx, dz]) => [x + dx, z + dz]).filter(([a, b]) => cells().has(a + ',' + b));
+      const clear = () => { if (r.g) { scene.remove(r.g); r.cars.forEach(w => scene.remove(w)); } r.g = null; r.cars = []; r.trail = []; };
+      r.move = (dt, t) => {
+        const set = cells(), ok = c => c && set.has(c[0] + ',' + c[1]);
+        if (set.size < minCells) { clear(); return; }
+        if (!r.g || !ok(r.from) || !ok(r.to)) {
+          clear();
+          const list = [...set].map(k => k.split(',').map(Number)).filter(c => nbrs(...c).length);
+          if (!list.length) return;
+          r.from = list[Math.floor(Math.random() * list.length)]; r.to = nbrs(...r.from)[0]; r.t = 0;
+          const made = build(); r.g = made[0]; r.cars = made.slice(1); made.forEach(o => scene.add(o));
+          if (smoke) { r.smoke = Models.addSmoke(r.g, 0.15, 0.5, 0); r.g.traverse(o => { if (o.userData.smoke) o.scale.multiplyScalar(0.4); }); }
+        }
+        r.t += dt * speed;
+        while (r.t >= 1) {
+          r.t -= 1;
+          const nb = nbrs(...r.to), ahead = nb.filter(n => n[0] !== r.from[0] || n[1] !== r.from[1]);
+          const dx = r.to[0] - r.from[0], dz = r.to[1] - r.from[1];
+          const straight = ahead.find(n => n[0] - r.to[0] === dx && n[1] - r.to[1] === dz);
+          const next = straight || ahead[Math.floor(Math.random() * ahead.length)] || r.from;
+          r.from = r.to; r.to = next;
+        }
+        const x = r.from[0] + (r.to[0] - r.from[0]) * r.t + 0.5 - HALF, z = r.from[1] + (r.to[1] - r.from[1]) * r.t + 0.5 - HALF;
+        const last = r.trail[r.trail.length - 1];
+        if (!last || Math.hypot(last.x - x, last.z - z) > 0.03) { r.trail.push({ x, z }); if (r.trail.length > 200) r.trail.shift(); }
+        const place = (obj, back) => {
+          let d = 0, i = r.trail.length - 1, p = { x, z };
+          while (i > 0 && d < back) { const q = r.trail[i - 1]; d += Math.hypot(p.x - q.x, p.z - q.z); p = q; i--; }
+          const a = r.trail[Math.max(0, i)], b = r.trail[Math.min(r.trail.length - 1, i + 3)] || a;
+          obj.position.set(p.x, y, p.z);
+          if (a && b && (a.x !== b.x || a.z !== b.z)) obj.rotation.y = Math.atan2(-(b.z - a.z), b.x - a.x);
+        };
+        r.g.position.set(x, y, z);
+        r.g.rotation.y = Math.atan2(-(r.to[1] - r.from[1]), r.to[0] - r.from[0]);
+        r.cars.forEach((w, k) => place(w, 0.62 * (k + 1)));
+        if (r.smoke) r.smoke(t, dt, night);
+      };
+      return r;
+    }
+    const runners = [
+      makeRunner({ cells: () => railCells, y: 0.04, speed: 1.1, minCells: 4, smoke: true, build: () => [makeTrainCar(true, 0), makeTrainCar(false, 8), makeTrainCar(false, 3)] }),
+      makeRunner({ cells: () => monoCells, y: MONO_Y + 0.08, speed: 1.5, minCells: 3, build: () => [makeMonoCar(true, 9), makeMonoCar(false, 9)] }),
+    ];
+    function moveTrain(dt, t) { runners.forEach(r => r.move(dt, t)); }
 
     // ---- day / night
     let night = 0;
@@ -578,7 +606,7 @@
       else if (root.BV.Sound && root.BV.Sound.chime) root.BV.Sound.chime();
       return true;
     }
-    const tiles = ref => (ref === 'rail' ? railCells : ref === 'water' ? waterCells : roadCells);
+    const tiles = ref => (ref === 'rail' ? railCells : ref === 'water' ? waterCells : ref === 'mono' ? monoCells : roadCells);
     const api = { HALF, tiles, react, village: () => lastV, objectOf: id => (live.get(id) || {}).obj, life: null, renderer, scene, camera, controls, sync, setGhost, setSelected, pickCell, pickItemId, pickPart, paintParts, partCenter, hitsGround, capture, setSeason, setWeather, setNight, startCars, stopCars, thumbnail, addMarker, clearMarkers, resize, setInsets, grid, paused: false, get night() { return night; }, onFrame: null };
     (function tick() {
       requestAnimationFrame(tick);

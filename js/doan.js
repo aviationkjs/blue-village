@@ -7,10 +7,10 @@
   const G = node ? require('./grid.js') : root.BV.Grid;
   // a fresh village for one template (no paint): items keep their template index in tpl
   function village(i) {
-    const L = LEVELS[i], v = G.create();
+    const L = LEVELS[i], v = G.create(24); // templates were drawn on the 24x24 board
     L.roads.forEach(([x, z]) => G.place(v, { kind: 'road', ref: 'road', x, z, rot: 0 }));
     L.items.forEach((o, n) => { const id = G.place(v, { kind: o.k, ref: o.r, x: o.x, z: o.z, rot: o.rot }); const it = v.items.find(t => t.id === id); if (it) it.tpl = n; });
-    return v;
+    return G.grow(v);
   }
   const api = { LEVELS, village };
   if (node) module.exports = api;

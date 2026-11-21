@@ -48,6 +48,10 @@
     whoosh() { if (!ok()) return; burst(1.0, { freq: 300, sweep: 1800, vol: 0.2, q: 0.6 }); },
     splash() { if (!ok()) return; burst(0.6, { freq: 1500, sweep: 500, vol: 0.25, q: 0.5 }); for (let i = 0; i < 4; i++) tone(900 + Math.random() * 900, 0.12, { vol: 0.05, when: 0.1 + i * 0.07, slide: 1600 }); },
     whistle() { if (!ok()) return; tone(880, 0.35, { vol: 0.08 }); tone(1108, 0.5, { vol: 0.07, when: 0.25 }); },
+    // a far-off "wheee" from riders: two vowel-ish noise bands that rise and fade
+    cheer() { if (!ok()) return; burst(1.4, { freq: 700, sweep: 1100, vol: 0.12, q: 4 }); burst(1.4, { freq: 1300, sweep: 1900, vol: 0.08, q: 5 }); tone(620, 1.1, { type: 'triangle', vol: 0.03, slide: 980, attack: 0.15 }); },
+    // a little music-box tune
+    musicBox() { if (!ok()) return; [1047, 1319, 1568, 1319, 1175, 1568, 2093, 1568].forEach((f, i) => tone(f, 0.9, { type: 'sine', vol: 0.05, when: i * 0.18, attack: 0.005 })); },
     chirp() { if (!ok()) return; const base = 2400 + Math.random() * 1200; for (let i = 0; i < 3; i++) tone(base, 0.09, { vol: 0.05, when: i * 0.12, slide: base * 1.4 }); },
   };
 

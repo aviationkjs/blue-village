@@ -1,7 +1,7 @@
 // Service worker: offline after the first visit, and new versions apply on their own.
 // Own files: network first (always the newest when online), cache when offline.
 // CDN libraries and fonts: cache first, refreshed in the background.
-const CACHE = 'blue-village-20261120131755';
+const CACHE = 'blue-village-20261121122618';
 const CORE = [
   "./",
   "./index.html",
@@ -23,6 +23,7 @@ const CORE = [
   "./js/sheet.js",
   "./js/sound.js",
   "./js/spot.js",
+  "./js/themepark.js",
   "./assets/music.mp3",
   "./assets/sheet1.webp",
   "./icons/apple-touch-icon.png",
