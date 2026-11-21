@@ -1,18 +1,120 @@
-// Colouring templates ("칠하기 도안"): 20 hand-placed villages with target colours.
-// Each item: k kind, r ref, x/z cell, rot, w wall colour (fill surfaces), s roof/leaf colour (soft), n window colour.
-// roads: cells; road: colour for every road cell (or null). Colour codes: 100 + hue*16 + tone (see models3d.js).
+// Colouring templates ("칠하기 도안"), made at random each time.
+// generate(seed, level) → { name, level, items: [{ k, r, x, z, rot, w, s, n }], roads: [[x, z]], road }
+//   k kind, r ref, w wall colour (fill surfaces), s roof/leaf colour (soft), n window colour; road: colour of every road cell or null.
+//   Colour codes: 100 + hue*16 + tone (tone 0 light .. 15 dark), see models3d.js.
+// village(L) → a fresh village for that template (no paint); each item keeps its template index in tpl.
 (function (root) {
-  const LEVELS = [{"name":"첫 마을","items":[{"k":"house","r":"0","x":9,"z":10,"rot":0,"w":106,"s":251},{"k":"house","r":"4","x":13,"z":10,"rot":0,"w":152,"s":187}],"roads":[[8,12],[9,12],[10,12],[11,12],[12,12],[13,12],[14,12],[15,12]],"road":null},{"name":"노란 지붕 셋","items":[{"k":"house","r":"1","x":7,"z":10,"rot":0,"w":312,"s":152},{"k":"house","r":"12","x":11,"z":10,"rot":0,"w":233,"s":152},{"k":"house","r":"15","x":15,"z":10,"rot":0,"w":169,"s":152}],"roads":[[6,12],[7,12],[8,12],[9,12],[10,12],[11,12],[12,12],[13,12],[14,12],[15,12],[16,12],[17,12]],"road":null},{"name":"나무 사이 집","items":[{"k":"house","r":"1","x":10,"z":8,"rot":1,"w":122,"s":128},{"k":"house","r":"12","x":10,"z":13,"rot":1,"w":233,"s":128},{"k":"house","r":"15","x":13,"z":10,"rot":3,"w":312,"s":128},{"k":"deco","r":"tree","x":8,"z":6,"rot":0,"w":128,"s":187},{"k":"deco","r":"tree","x":15,"z":7,"rot":0,"w":128,"s":187},{"k":"deco","r":"tree","x":8,"z":16,"rot":0,"w":128,"s":187},{"k":"deco","r":"tree","x":15,"z":15,"rot":0,"w":128,"s":187},{"k":"deco","r":"roundTree","x":16,"z":12,"rot":0,"w":128,"s":169}],"roads":[[12,6],[12,7],[12,8],[12,9],[12,10],[12,11],[12,12],[12,13],[12,14],[12,15],[12,16],[12,17]],"road":null},{"name":"길 따라","items":[{"k":"house","r":"3","x":4,"z":9,"rot":0,"w":106,"s":270},{"k":"house","r":"33","x":8,"z":9,"rot":0,"w":122,"s":270},{"k":"house","r":"42","x":12,"z":9,"rot":0,"w":152,"s":270},{"k":"house","r":"49","x":16,"z":9,"rot":0,"w":187,"s":270},{"k":"deco","r":"tree","x":6,"z":13,"rot":0,"w":128,"s":187},{"k":"deco","r":"tree","x":10,"z":13,"rot":0,"w":128,"s":187},{"k":"deco","r":"tree","x":14,"z":13,"rot":0,"w":128,"s":187},{"k":"deco","r":"tree","x":18,"z":13,"rot":0,"w":128,"s":187}],"roads":[[3,11],[4,11],[5,11],[6,11],[7,11],[8,11],[9,11],[10,11],[11,11],[12,11],[13,11],[14,11],[15,11],[16,11],[17,11],[18,11],[19,11],[20,11]],"road":347},{"name":"작은 광장","items":[{"k":"model","r":"fountain","x":11,"z":11,"rot":0,"w":233},{"k":"house","r":"2","x":11,"z":7,"rot":0,"w":152,"s":106},{"k":"house","r":"25","x":11,"z":15,"rot":2,"w":312,"s":251},{"k":"house","r":"9","x":7,"z":11,"rot":1,"w":312,"s":106},{"k":"house","r":"16","x":15,"z":11,"rot":3,"w":152,"s":251},{"k":"deco","r":"bench","x":10,"z":11,"rot":0,"w":128,"s":106},{"k":"deco","r":"bench","x":13,"z":12,"rot":0,"w":128,"s":106}],"roads":[[9,9],[9,10],[9,11],[9,12],[9,13],[9,14],[10,9],[10,14],[11,9],[11,14],[12,9],[12,14],[13,9],[13,14],[14,9],[14,10],[14,11],[14,12],[14,13],[14,14]],"road":343},{"name":"연못 공원","items":[{"k":"model","r":"pond","x":9,"z":9,"rot":0,"w":347,"s":187},{"k":"model","r":"pond","x":11,"z":10,"rot":0,"w":347,"s":187},{"k":"model","r":"bridge","x":13,"z":10,"rot":0,"w":140},{"k":"deco","r":"bench","x":8,"z":12,"rot":0,"w":128,"s":191},{"k":"deco","r":"bench","x":12,"z":13,"rot":0,"w":128,"s":191},{"k":"deco","r":"tree","x":7,"z":8,"rot":0,"w":128,"s":187},{"k":"deco","r":"tree","x":16,"z":8,"rot":0,"w":128,"s":169},{"k":"deco","r":"tree","x":7,"z":13,"rot":0,"w":128,"s":191},{"k":"deco","r":"roundTree","x":16,"z":13,"rot":0,"w":128,"s":187},{"k":"deco","r":"bush","x":10,"z":12,"rot":0,"s":191},{"k":"deco","r":"bush","x":11,"z":12,"rot":0,"s":169},{"k":"deco","r":"roundTree","x":13,"z":7,"rot":0,"w":128,"s":169},{"k":"deco","r":"tree","x":10,"z":7,"rot":0,"w":128,"s":187}],"roads":[],"road":null},{"name":"빨간 마을","items":[{"k":"house","r":"13","x":6,"z":8,"rot":0,"w":106,"s":347},{"k":"house","r":"22","x":10,"z":8,"rot":0,"w":312,"s":270},{"k":"house","r":"24","x":14,"z":8,"rot":0,"w":110,"s":347},{"k":"house","r":"27","x":6,"z":12,"rot":1,"w":330,"s":270},{"k":"house","r":"29","x":14,"z":12,"rot":3,"w":103,"s":347},{"k":"deco","r":"tree","x":9,"z":16,"rot":0,"w":128,"s":187},{"k":"deco","r":"tree","x":12,"z":16,"rot":0,"w":128,"s":187}],"roads":[[5,10],[6,10],[7,10],[8,10],[8,11],[8,12],[8,13],[8,14],[8,15],[9,10],[10,10],[10,11],[11,10],[11,11],[12,10],[12,11],[13,10],[13,11],[13,12],[13,13],[13,14],[13,15],[14,10],[15,10],[16,10],[17,10],[18,10]],"road":347},{"name":"푸른 바닷가","items":[{"k":"house","r":"5","x":5,"z":9,"rot":0,"w":233,"s":270},{"k":"house","r":"26","x":9,"z":9,"rot":0,"w":230,"s":251},{"k":"house","r":"28","x":13,"z":9,"rot":0,"w":203,"s":270},{"k":"house","r":"32","x":17,"z":9,"rot":0,"w":251,"s":230},{"k":"model","r":"storeBox","x":8,"z":13,"rot":2,"w":230,"s":152},{"k":"model","r":"storeBox","x":14,"z":13,"rot":2,"w":233,"s":152},{"k":"deco","r":"lamp","x":12,"z":13,"rot":0},{"k":"deco","r":"bench","x":11,"z":13,"rot":0,"w":125,"s":233}],"roads":[[4,11],[5,11],[6,11],[7,11],[8,11],[9,11],[10,11],[11,11],[12,11],[13,11],[14,11],[15,11],[16,11],[17,11],[18,11],[19,11],[20,11]],"road":230},{"name":"놀이터 동네","items":[{"k":"model","r":"playground","x":10,"z":10,"rot":0,"w":106,"s":152},{"k":"house","r":"3","x":6,"z":6,"rot":0,"w":152,"s":106},{"k":"house","r":"42","x":10,"z":6,"rot":0,"w":312,"s":251},{"k":"house","r":"43","x":14,"z":6,"rot":0,"w":233,"s":106},{"k":"house","r":"0","x":6,"z":14,"rot":2,"w":312,"s":251},{"k":"house","r":"12","x":14,"z":14,"rot":2,"w":152,"s":106},{"k":"deco","r":"tree","x":8,"z":11,"rot":0,"w":128,"s":187},{"k":"deco","r":"roundTree","x":14,"z":12,"rot":0,"w":128,"s":187},{"k":"deco","r":"bench","x":9,"z":12,"rot":0,"w":128,"s":251}],"roads":[[5,8],[5,9],[5,10],[5,11],[5,12],[5,13],[6,8],[6,13],[7,8],[7,13],[8,8],[8,13],[9,8],[9,13],[10,8],[10,13],[11,8],[11,13],[12,8],[12,13],[13,8],[13,13],[14,8],[14,13],[15,8],[15,13],[16,8],[16,13],[17,8],[17,9],[17,10],[17,11],[17,12],[17,13]],"road":343},{"name":"탑이 있는 마을","items":[{"k":"model","r":"tower","x":10,"z":8,"rot":0,"w":343,"s":106},{"k":"house","r":"8","x":6,"z":7,"rot":1,"w":152,"s":106},{"k":"house","r":"11","x":16,"z":8,"rot":3,"w":233,"s":270},{"k":"house","r":"20","x":7,"z":13,"rot":1,"w":312,"s":106},{"k":"house","r":"31","x":15,"z":13,"rot":3,"w":169,"s":270},{"k":"deco","r":"tree","x":9,"z":16,"rot":0,"w":128,"s":187},{"k":"deco","r":"tree","x":14,"z":16,"rot":0,"w":128,"s":187}],"roads":[[8,6],[8,7],[8,8],[8,9],[8,10],[8,11],[9,11],[9,12],[9,13],[9,14],[9,15],[10,11],[11,11],[12,11],[13,11],[14,11],[14,12],[14,13],[14,14],[14,15],[15,6],[15,7],[15,8],[15,9],[15,10],[15,11]],"road":347},{"name":"온실 농장","items":[{"k":"model","r":"greenhouse","x":7,"z":8,"rot":0,"w":169,"s":187},{"k":"model","r":"storeBox","x":10,"z":8,"rot":0,"w":122,"s":128},{"k":"model","r":"cottage","x":14,"z":8,"rot":0,"w":125,"s":110},{"k":"deco","r":"fence","x":6,"z":12,"rot":0,"w":128},{"k":"deco","r":"fence","x":7,"z":12,"rot":0,"w":128},{"k":"deco","r":"fence","x":8,"z":12,"rot":0,"w":128},{"k":"deco","r":"fence","x":9,"z":12,"rot":0,"w":128},{"k":"deco","r":"fence","x":10,"z":12,"rot":0,"w":128},{"k":"deco","r":"tree","x":6,"z":15,"rot":0,"w":128,"s":187},{"k":"deco","r":"roundTree","x":9,"z":15,"rot":0,"w":128,"s":169},{"k":"deco","r":"tree","x":12,"z":15,"rot":0,"w":128,"s":187},{"k":"deco","r":"bush","x":15,"z":12,"rot":0,"s":191},{"k":"deco","r":"bush","x":17,"z":12,"rot":0,"s":169}],"roads":[[6,10],[7,10],[8,10],[9,10],[10,10],[11,10],[11,11],[11,12],[11,13],[12,10],[13,10],[14,10],[15,10],[16,10],[17,10],[18,10]],"road":null},{"name":"무지개 거리","items":[{"k":"house","r":"0","x":3,"z":10,"rot":0,"w":106,"s":270},{"k":"house","r":"1","x":6,"z":10,"rot":0,"w":122,"s":270},{"k":"house","r":"3","x":9,"z":10,"rot":0,"w":152,"s":270},{"k":"house","r":"4","x":12,"z":10,"rot":0,"w":187,"s":270},{"k":"house","r":"12","x":15,"z":10,"rot":0,"w":233,"s":270},{"k":"house","r":"15","x":18,"z":10,"rot":0,"w":251,"s":343},{"k":"house","r":"33","x":21,"z":10,"rot":0,"w":283,"s":343}],"roads":[[2,12],[3,12],[4,12],[5,12],[6,12],[7,12],[8,12],[9,12],[10,12],[11,12],[12,12],[13,12],[14,12],[15,12],[16,12],[17,12],[18,12],[19,12],[20,12],[21,12],[22,12]],"road":343},{"name":"성 마을","items":[{"k":"model","r":"castle","x":10,"z":6,"rot":0,"w":343,"s":283},{"k":"deco","r":"fence","x":8,"z":9,"rot":0,"w":128},{"k":"deco","r":"fence","x":9,"z":9,"rot":0,"w":128},{"k":"deco","r":"fence","x":13,"z":9,"rot":0,"w":128},{"k":"deco","r":"fence","x":14,"z":9,"rot":0,"w":128},{"k":"house","r":"14","x":6,"z":12,"rot":0,"w":152,"s":106},{"k":"house","r":"24","x":14,"z":12,"rot":0,"w":312,"s":106},{"k":"house","r":"40","x":8,"z":15,"rot":2,"w":312,"s":270},{"k":"house","r":"29","x":12,"z":15,"rot":2,"w":152,"s":270},{"k":"deco","r":"tree","x":17,"z":8,"rot":0,"w":128,"s":187},{"k":"deco","r":"tree","x":6,"z":8,"rot":0,"w":128,"s":187}],"roads":[[5,14],[6,14],[7,14],[8,14],[9,14],[10,14],[11,8],[11,9],[11,10],[11,11],[11,12],[11,13],[11,14],[12,14],[13,14],[14,14],[15,14],[16,14],[17,14]],"road":157},{"name":"꽃 마을","items":[{"k":"house","r":"7","x":8,"z":9,"rot":0,"w":312,"s":283},{"k":"house","r":"30","x":13,"z":9,"rot":0,"w":279,"s":330},{"k":"house","r":"35","x":8,"z":12,"rot":2,"w":103,"s":330},{"k":"house","r":"38","x":13,"z":12,"rot":2,"w":312,"s":279},{"k":"deco","r":"bush","x":11,"z":8,"rot":0,"s":169},{"k":"deco","r":"bush","x":12,"z":8,"rot":0,"s":169},{"k":"deco","r":"flowers","x":7,"z":8,"rot":0,"s":187},{"k":"deco","r":"flowers","x":8,"z":8,"rot":0,"s":187},{"k":"deco","r":"flowers","x":15,"z":8,"rot":0,"s":187},{"k":"deco","r":"flowers","x":16,"z":8,"rot":0,"s":187},{"k":"deco","r":"flowers","x":7,"z":14,"rot":0,"s":187},{"k":"deco","r":"flowers","x":16,"z":14,"rot":0,"s":187},{"k":"deco","r":"flowers","x":11,"z":15,"rot":0,"s":187},{"k":"deco","r":"flowers","x":12,"z":15,"rot":0,"s":187}],"roads":[[7,11],[8,11],[9,11],[10,11],[11,11],[12,11],[13,11],[14,11],[15,11],[16,11]],"road":150},{"name":"가을 마을","items":[{"k":"house","r":"13","x":6,"z":9,"rot":0,"w":119,"s":128},{"k":"house","r":"14","x":10,"z":9,"rot":0,"w":152,"s":110},{"k":"house","r":"22","x":14,"z":9,"rot":0,"w":122,"s":128},{"k":"house","r":"24","x":10,"z":12,"rot":2,"w":125,"s":140},{"k":"deco","r":"tree","x":5,"z":13,"rot":0,"w":128,"s":122},{"k":"deco","r":"roundTree","x":7,"z":14,"rot":0,"w":128,"s":106},{"k":"deco","r":"tree","x":14,"z":14,"rot":0,"w":128,"s":157},{"k":"deco","r":"roundTree","x":16,"z":13,"rot":0,"w":128,"s":140},{"k":"deco","r":"tree","x":18,"z":9,"rot":0,"w":128,"s":106},{"k":"deco","r":"tree","x":8,"z":7,"rot":0,"w":128,"s":122},{"k":"deco","r":"roundTree","x":13,"z":7,"rot":0,"w":128,"s":157},{"k":"deco","r":"tree","x":17,"z":7,"rot":0,"w":128,"s":106}],"roads":[[5,11],[6,11],[7,11],[8,11],[9,11],[10,11],[11,11],[12,11],[13,11],[14,11],[15,11],[16,11],[17,11],[18,11]],"road":125},{"name":"숲속 오두막","items":[{"k":"model","r":"cottage","x":10,"z":10,"rot":0,"w":125,"s":191},{"k":"deco","r":"bench","x":12,"z":13,"rot":0,"w":128,"s":187},{"k":"deco","r":"tree","x":7,"z":8,"rot":0,"w":128,"s":187},{"k":"deco","r":"tree","x":8,"z":11,"rot":0,"w":128,"s":191},{"k":"deco","r":"roundTree","x":7,"z":14,"rot":0,"w":128,"s":169},{"k":"deco","r":"tree","x":10,"z":15,"rot":0,"w":128,"s":187},{"k":"deco","r":"roundTree","x":13,"z":15,"rot":0,"w":128,"s":191},{"k":"deco","r":"tree","x":15,"z":13,"rot":0,"w":128,"s":187},{"k":"deco","r":"tree","x":15,"z":9,"rot":0,"w":128,"s":169},{"k":"deco","r":"roundTree","x":13,"z":7,"rot":0,"w":128,"s":187},{"k":"deco","r":"tree","x":10,"z":7,"rot":0,"w":128,"s":191},{"k":"deco","r":"roundTree","x":16,"z":11,"rot":0,"w":128,"s":187},{"k":"deco","r":"bush","x":9,"z":13,"rot":0,"s":187},{"k":"deco","r":"bush","x":14,"z":12,"rot":0,"s":169}],"roads":[[11,12],[11,13],[11,14],[11,15],[11,16],[11,17]],"road":125},{"name":"십자 거리","items":[{"k":"house","r":"0","x":8,"z":8,"rot":0,"w":106,"s":347},{"k":"house","r":"1","x":8,"z":12,"rot":0,"w":122,"s":347},{"k":"house","r":"3","x":13,"z":8,"rot":0,"w":152,"s":347},{"k":"house","r":"4","x":13,"z":12,"rot":0,"w":187,"s":347},{"k":"house","r":"12","x":9,"z":15,"rot":1,"w":233,"s":270},{"k":"house","r":"15","x":12,"z":15,"rot":3,"w":251,"s":270},{"k":"house","r":"33","x":9,"z":5,"rot":1,"w":283,"s":270},{"k":"house","r":"42","x":12,"z":5,"rot":3,"w":312,"s":270}],"roads":[[5,10],[5,14],[6,10],[6,14],[7,10],[7,14],[8,10],[8,14],[9,10],[9,14],[10,10],[10,14],[11,4],[11,5],[11,6],[11,7],[11,8],[11,9],[11,10],[11,11],[11,12],[11,13],[11,14],[11,15],[11,16],[11,17],[11,18],[12,10],[12,14],[13,10],[13,14],[14,10],[14,14],[15,10],[15,14],[16,10],[16,14],[17,10],[17,14]],"road":343},{"name":"두 동네","items":[{"k":"house","r":"13","x":8,"z":6,"rot":1,"w":106,"s":152},{"k":"house","r":"14","x":8,"z":10,"rot":1,"w":122,"s":152},{"k":"house","r":"22","x":8,"z":14,"rot":1,"w":152,"s":106},{"k":"deco","r":"tree","x":6,"z":8,"rot":0,"w":128,"s":122},{"k":"deco","r":"roundTree","x":6,"z":12,"rot":0,"w":128,"s":106},{"k":"house","r":"26","x":13,"z":6,"rot":3,"w":233,"s":270},{"k":"house","r":"28","x":13,"z":10,"rot":3,"w":251,"s":230},{"k":"house","r":"32","x":13,"z":14,"rot":3,"w":203,"s":270},{"k":"deco","r":"roundTree","x":17,"z":8,"rot":0,"w":128,"s":233},{"k":"deco","r":"tree","x":17,"z":12,"rot":0,"w":128,"s":203}],"roads":[[10,4],[10,5],[10,6],[10,7],[10,8],[10,9],[10,10],[10,11],[10,12],[10,13],[10,14],[10,15],[10,16],[10,17],[11,4],[11,5],[11,6],[11,7],[11,8],[11,9],[11,10],[11,11],[11,12],[11,13],[11,14],[11,15],[11,16],[11,17],[12,4],[12,5],[12,6],[12,7],[12,8],[12,9],[12,10],[12,11],[12,12],[12,13],[12,14],[12,15],[12,16],[12,17]],"road":347},{"name":"큰 공원","items":[{"k":"model","r":"fountain","x":11,"z":10,"rot":0,"w":279},{"k":"model","r":"pond","x":6,"z":6,"rot":0,"w":347,"s":187},{"k":"model","r":"bridge","x":8,"z":7,"rot":0,"w":140},{"k":"model","r":"playground","x":15,"z":6,"rot":0,"w":106,"s":152},{"k":"deco","r":"bench","x":10,"z":13,"rot":0,"w":128,"s":191},{"k":"deco","r":"bench","x":13,"z":13,"rot":0,"w":128,"s":191},{"k":"deco","r":"lamp","x":9,"z":10,"rot":0},{"k":"deco","r":"lamp","x":14,"z":10,"rot":0},{"k":"deco","r":"tree","x":6,"z":11,"rot":0,"w":128,"s":187},{"k":"deco","r":"roundTree","x":6,"z":14,"rot":0,"w":128,"s":169},{"k":"deco","r":"tree","x":17,"z":11,"rot":0,"w":128,"s":191},{"k":"deco","r":"tree","x":17,"z":14,"rot":0,"w":128,"s":187},{"k":"deco","r":"bush","x":9,"z":16,"rot":0,"s":187},{"k":"deco","r":"bush","x":14,"z":16,"rot":0,"s":169},{"k":"deco","r":"flowers","x":11,"z":16,"rot":0,"s":187},{"k":"deco","r":"flowers","x":12,"z":16,"rot":0,"s":187}],"roads":[[5,9],[6,9],[7,9],[8,9],[9,9],[10,9],[11,9],[11,12],[12,9],[12,12],[13,9],[14,9],[15,9],[16,9],[17,9],[18,9]],"road":150},{"name":"무지개 큰 마을","items":[{"k":"model","r":"tripleGable","x":3,"z":6,"rot":0,"w":106,"s":270},{"k":"model","r":"tower","x":7,"z":5,"rot":0,"w":122,"s":110},{"k":"house","r":"2","x":11,"z":7,"rot":0,"w":152,"s":270},{"k":"house","r":"8","x":14,"z":7,"rot":0,"w":169,"s":270},{"k":"house","r":"11","x":17,"z":7,"rot":0,"w":187,"s":270},{"k":"model","r":"castle","x":4,"z":12,"rot":2,"w":233,"s":251},{"k":"house","r":"20","x":8,"z":10,"rot":2,"w":251,"s":230},{"k":"house","r":"25","x":11,"z":10,"rot":2,"w":283,"s":312},{"k":"house","r":"31","x":14,"z":10,"rot":2,"w":312,"s":283},{"k":"model","r":"fountain","x":18,"z":13,"rot":0,"w":279},{"k":"deco","r":"tree","x":20,"z":7,"rot":0,"w":128,"s":187},{"k":"deco","r":"roundTree","x":20,"z":16,"rot":0,"w":128,"s":169},{"k":"deco","r":"tree","x":3,"z":16,"rot":0,"w":128,"s":191},{"k":"deco","r":"bench","x":17,"z":16,"rot":0,"w":128,"s":106}],"roads":[[2,9],[2,10],[2,11],[3,9],[4,9],[5,9],[6,9],[7,9],[8,9],[9,9],[10,9],[11,9],[12,9],[13,9],[14,9],[15,9],[16,9],[17,9],[17,10],[17,11],[18,9],[19,9],[20,9],[21,9]],"road":343}];
   const node = typeof module !== 'undefined' && module.exports;
   const G = node ? require('./grid.js') : root.BV.Grid;
-  // a fresh village for one template (no paint): items keep their template index in tpl
-  function village(i) {
-    const L = LEVELS[i], v = G.create(24); // templates were drawn on the 24x24 board
+  const D = node ? require('./decorate.js') : root.BV.Decorate;
+
+  const c = (hue, tone) => 100 + hue * 16 + tone;
+  // colour schemes that go well together: walls, roofs, leaves, roads, windows
+  const SCHEMES = [
+    { name: '노을빛', walls: [c(2, 2), c(1, 2), c(13, 2), c(3, 2)], roofs: [c(0, 6), c(1, 7), c(14, 7), c(2, 8)], leaf: [c(5, 6), c(4, 7)], road: [c(2, 4), c(15, 4)], win: [c(3, 4), c(8, 3)] },
+    { name: '바닷가', walls: [c(8, 2), c(7, 2), c(9, 1), c(15, 1)], roofs: [c(9, 7), c(10, 7), c(6, 7), c(8, 8)], leaf: [c(6, 6), c(5, 6)], road: [c(7, 4), c(15, 5)], win: [c(3, 3), c(1, 3)] },
+    { name: '숲속', walls: [c(4, 2), c(2, 3), c(5, 2), c(15, 1)], roofs: [c(5, 8), c(0, 8), c(2, 10), c(6, 9)], leaf: [c(5, 7), c(4, 8)], road: [c(2, 6), c(15, 6)], win: [c(3, 4), c(4, 3)] },
+    { name: '파스텔', walls: [c(13, 2), c(11, 2), c(8, 2), c(3, 2)], roofs: [c(13, 5), c(11, 5), c(8, 5), c(1, 5)], leaf: [c(4, 5), c(5, 5)], road: [c(15, 3), c(13, 3)], win: [c(3, 3), c(7, 3)] },
+    { name: '무지개', walls: [c(0, 3), c(1, 3), c(3, 3), c(5, 3), c(8, 3), c(11, 3)], roofs: [c(9, 7), c(0, 7), c(11, 7), c(5, 8)], leaf: [c(5, 6), c(4, 6)], road: [c(15, 4), c(8, 4)], win: [c(3, 4), c(13, 3)] },
+    { name: '겨울', walls: [c(15, 0), c(8, 1), c(9, 1), c(11, 1)], roofs: [c(9, 8), c(10, 9), c(15, 8), c(0, 7)], leaf: [c(6, 8), c(5, 9)], road: [c(15, 5), c(8, 5)], win: [c(3, 3), c(2, 3)] },
+  ];
+  const LEVEL = {
+    easy: { size: 10, blds: [3, 4], nW: 1, nR: 1, win: 0, road: 0, special: 0, rides: 0, deco: [2, 3], label: '쉬움' },
+    normal: { size: 14, blds: [5, 6], nW: 2, nR: 1, win: 0, road: 0.5, special: 0.7, rides: 0, deco: [3, 5], label: '보통' },
+    hard: { size: 18, blds: [7, 9], nW: 3, nR: 2, win: 0.7, road: 0.85, special: 1, rides: 0.6, deco: [4, 7], label: '어려움' },
+  };
+  const SPECIAL = ['windmill', 'lighthouse', 'clockTower', 'church', 'treehouse', 'pavilion', 'bakery', 'flowerShop', 'cafe', 'bookstore', 'postOffice', 'greenhouse', 'library', 'market'];
+  const RIDES = ['carousel', 'swingRide', 'dropTower', 'obsTower', 'bigWheel', 'ferrisWheel', 'viking'];
+  const DECO = ['tree', 'roundTree', 'bush', 'cherry', 'fruitTree', 'flowers', 'sunflowers', 'bench'];
+  const LEAFY = ['tree', 'roundTree', 'bush', 'cherry', 'fruitTree', 'sunflowers', 'flowers'];
+  const LAYOUTS = { street: '골목', cross: '사거리', square: '광장' };
+
+  function generate(seed, level = 'normal') {
+    const P = LEVEL[level] || LEVEL.normal;
+    const rand = D.rng(seed * 7919 + 13);
+    const pick = a => a[Math.floor(rand() * a.length)];
+    const between = ([a, b]) => a + Math.floor(rand() * (b - a + 1));
+    const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+
+    const v = G.create(), C = Math.floor(v.size / 2), half = Math.floor(P.size / 2);
+    const lo = C - half, hi = C + half - 1;
+    // roads
+    const layout = level === 'easy' ? 'street' : pick(Object.keys(LAYOUTS));
+    const roads = [];
+    const road = (x, z) => { if (G.place(v, { kind: 'road', ref: 'road', x, z, rot: 0 })) roads.push([x, z]); };
+    if (layout === 'street') for (let x = lo; x <= hi; x++) road(x, C);
+    else if (layout === 'cross') { for (let x = lo; x <= hi; x++) road(x, C); for (let z = lo; z <= hi; z++) if (z !== C) road(C, z); }
+    else { const a = C - 3, b = C + 2; for (let i = a; i <= b; i++) { road(i, a); road(i, b); if (i !== a && i !== b) { road(a, i); road(b, i); } } }
+
+    // what to build
+    const n = between(P.blds);
+    const refs = [];
+    if (layout === 'square') refs.push({ k: 'model', r: rand() < P.rides ? 'carousel' : pick(['fountain', 'pavilion', 'clockTower']), centre: true });
+    if (rand() < P.rides) refs.push({ k: 'model', r: pick(RIDES) });
+    if (rand() < P.special) refs.push({ k: 'model', r: pick(SPECIAL) });
+    if (level === 'hard' && rand() < 0.6) refs.push({ k: 'model', r: pick(SPECIAL) });
+    while (refs.length < n) refs.push({ k: 'house', r: String(Math.floor(rand() * 50)) });
+
+    // colours
+    const S = pick(SCHEMES);
+    const walls = shuffle(S.walls.slice()).slice(0, P.nW), roofs = shuffle(S.roofs.slice()).slice(0, P.nR);
+    const leaf = pick(S.leaf), winCol = rand() < P.win ? pick(S.win) : undefined;
+    const roadCol = rand() < P.road ? pick(S.road) : null;
+
+    // place buildings facing a road: try road cells and the four sides in random order
+    const items = [];
+    const fits = (k, r, x, z, rot) => { const [w, d] = G.sized(k, r, rot); const it = { x, z, w, d }; return G.canPlace(v, it) && x >= lo - 4 && z >= lo - 4 && x + w <= hi + 5 && z + d <= hi + 5; };
+    function facing(k, r, [rx, rz], rot) {
+      const [w, d] = G.sized(k, r, rot);
+      if (rot === 0) return [rx - Math.floor(w / 2), rz - d];
+      if (rot === 1) return [rx - w, rz - Math.floor(d / 2)];
+      if (rot === 2) return [rx - Math.floor(w / 2), rz + 1];
+      return [rx + 1, rz - Math.floor(d / 2)];
+    }
+    refs.forEach((o, i) => {
+      let spot = null;
+      if (o.centre) {
+        const [w, d] = G.sized(o.k, o.r, 0), x = C - 1 - Math.floor((w - 1) / 2), z = C - 1 - Math.floor((d - 1) / 2);
+        if (fits(o.k, o.r, x, z, 0)) spot = [x, z, 0];
+      }
+      const cands = shuffle(roads.flatMap(rc => [0, 1, 2, 3].map(rot => [rc, rot])));
+      for (const [rc, rot] of cands) {
+        if (spot) break;
+        const [x, z] = facing(o.k, o.r, rc, rot);
+        if (fits(o.k, o.r, x, z, rot)) spot = [x, z, rot];
+      }
+      if (!spot) return;
+      const [x, z, rot] = spot;
+      G.place(v, { kind: o.k, ref: o.r, x, z, rot });
+      const it = { k: o.k, r: o.r, x, z, rot, w: walls[i % walls.length], s: roofs[Math.floor(rand() * roofs.length)] };
+      if (winCol !== undefined && rand() < 0.8) it.n = winCol;
+      items.push(it);
+    });
+
+    // trees and flowers around the buildings
+    const want = between(P.deco);
+    const spots = D.plan(v, seed + 1).filter(d => d.x >= lo - 3 && d.z >= lo - 3 && d.x <= hi + 3 && d.z <= hi + 3);
+    for (const d of spots) {
+      if (items.filter(i => i.k === 'deco').length >= want) break;
+      const ref = pick(DECO);
+      if (!G.place(v, { kind: 'deco', ref, x: d.x, z: d.z, rot: 0 })) continue;
+      const it = { k: 'deco', r: ref, x: d.x, z: d.z, rot: 0, s: LEAFY.includes(ref) ? leaf : roofs[0] };
+      if (ref === 'bench') it.w = walls[0];
+      items.push(it);
+    }
+
+    const ride = items.some(i => RIDES.includes(i.r)) ? ' 놀이공원' : '';
+    return { name: `${S.name}${ride} ${LAYOUTS[layout]}`, level, items, roads, road: roadCol };
+  }
+
+  function village(L) {
+    const v = G.create();
     L.roads.forEach(([x, z]) => G.place(v, { kind: 'road', ref: 'road', x, z, rot: 0 }));
     L.items.forEach((o, n) => { const id = G.place(v, { kind: o.k, ref: o.r, x: o.x, z: o.z, rot: o.rot }); const it = v.items.find(t => t.id === id); if (it) it.tpl = n; });
-    return G.grow(v);
+    return v;
   }
-  const api = { LEVELS, village };
+
+  const api = { generate, village, LEVEL, SCHEMES };
   if (node) module.exports = api;
   else { root.BV = root.BV || {}; root.BV.Doan = api; }
 })(this);

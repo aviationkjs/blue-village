@@ -30,20 +30,8 @@
   const hasFinal = w => { const c = w.charCodeAt(w.length - 1) - 0xAC00; return c >= 0 && c % 28 !== 0; };
   const eul = w => w + (hasFinal(w) ? '을' : '를');
 
-  function exampleVillage() {
-    const v = G.create(24); // laid out on the old board, then moved to the centre of the big one
-    const P = (kind, ref, x, z, rot) => G.place(v, { kind, ref: String(ref), x, z, rot });
-    for (let x = 2; x <= 21; x++) P('road', 'road', x, 8, 0);
-    [[0, 3], [10, 6], [23, 13], [6, 16]].forEach(([r, x]) => P('house', r, x, 6, 0));
-    P('model', 'cottage', 9, 6, 0); P('model', 'greenhouse', 19, 6, 0);
-    [[14, 3], [33, 6], [40, 13], [47, 19]].forEach(([r, x]) => P('house', r, x, 9, 2));
-    P('model', 'tripleGable', 9, 9, 2); P('model', 'storeBox', 16, 9, 2);
-    P('model', 'tower', 10, 15, 2); P('model', 'castle', 15, 16, 2);
-    P('house', 44, 5, 15, 1); P('house', 23, 19, 15, 3); P('house', 37, 4, 19, 1);
-    R.autoConnect(v).forEach(([x, z]) => P('road', 'road', x, z, 0));
-    D.plan(v, 7).forEach(d => G.place(v, d));
-    return G.grow(v);
-  }
+  // homes, theme park, forest and farm, shopping street and station: see example.js
+  function exampleVillage() { return window.BV.Example.build().village; }
 
   let houses = [];
   (function migrate() {
@@ -886,23 +874,35 @@
 
 
   // ================= colouring templates (칠하기 도안) =================
-  const DOAN = 'bv-doan';
-  const dz = { a: null, b: null, i: 0, vA: null, vB: null, groups: [], pal: [], cur: 0, mistakes: 0, hints: 0, open: false, labels: [] };
-  const doanStars = () => { try { return JSON.parse(store.get(DOAN) || '{}') || {}; } catch (e) { return {}; } };
+  // templates are made at random (BV.Doan.generate); we keep how many were finished and stars won, per level
+  const DOAN = 'bv-doan2', DOAN_OLD = 'bv-doan';
+  const dz = { a: null, b: null, L: null, level: 'easy', vA: null, vB: null, groups: [], pal: [], cur: 0, mistakes: 0, hints: 0, open: false, labels: [] };
+  const DOAN_LEVELS = ['easy', 'normal', 'hard'];
+  function doanStats() {
+    let o = null; try { o = JSON.parse(store.get(DOAN) || 'null'); } catch (e) { o = null; }
+    if (!o || typeof o !== 'object') {
+      o = {}; DOAN_LEVELS.forEach(k => { o[k] = { done: 0, stars: 0 }; });
+      // stars won on the old fixed templates carry over
+      try { const old = JSON.parse(store.get(DOAN_OLD) || '{}') || {}; const sum = Object.values(old).reduce((x, y) => x + (y | 0), 0); if (sum) { o.normal.stars = sum; o.normal.done = Object.keys(old).length; } } catch (e) { /* ignore */ }
+    }
+    DOAN_LEVELS.forEach(k => { if (!o[k]) o[k] = { done: 0, stars: 0 }; });
+    return o;
+  }
   const starText = n => '★'.repeat(n) + '☆'.repeat(3 - n);
+  const LEVEL_TEXT = { easy: '집 3~4채 · 색 3~4개', normal: '랜드마크·가게 · 색 5개', hard: '테마파크 기구 · 창문까지 · 색 6~8개' };
   function renderDoanList() {
     const box = $('doanList'); box.replaceChildren();
-    const got = doanStars();
-    BV.Doan.LEVELS.forEach((L, i) => {
-      const b = document.createElement('button'); b.type = 'button'; b.className = 'doan-card' + (got[i] ? ' done' : '');
+    const st3 = doanStats();
+    DOAN_LEVELS.forEach((k, i) => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'doan-card' + (st3[k].done ? ' done' : '');
       const n = document.createElement('b'); n.textContent = i + 1;
-      const nm = document.createElement('span'); nm.textContent = L.name;
-      const st2 = document.createElement('small'); st2.textContent = starText(got[i] || 0);
-      b.append(n, nm, st2); b.addEventListener('click', () => { closeDlg('doanDlg'); startDoan(i); });
+      const nm = document.createElement('span'); nm.textContent = BV.Doan.LEVEL[k].label + ' · ' + LEVEL_TEXT[k];
+      const st2 = document.createElement('small'); st2.textContent = `완성 ${st3[k].done}개 · 별 ${st3[k].stars}개`;
+      b.append(n, nm, st2); b.addEventListener('click', () => { closeDlg('doanDlg'); startDoan(k); });
       box.append(b);
     });
-    const total = Object.values(got).reduce((a, x) => a + x, 0);
-    $('doanTotal').textContent = `모은 별 ${total} / ${BV.Doan.LEVELS.length * 3}`;
+    const total = DOAN_LEVELS.reduce((x, k) => x + st3[k].stars, 0), done = DOAN_LEVELS.reduce((x, k) => x + st3[k].done, 0);
+    $('doanTotal').textContent = `누를 때마다 새 도안이 만들어져요 · 지금까지 완성 ${done}개, 모은 별 ${total}개`;
   }
   $('bDoan').addEventListener('click', () => { pop.hidden = true; renderDoanList(); openDlg('doanDlg'); });
 
@@ -922,7 +922,7 @@
   }
   // a group = all surfaces of one kind (walls, roofs/leaves, windows) on one building, or every road cell
   function buildGroups() {
-    const L = BV.Doan.LEVELS[dz.i];
+    const L = dz.L;
     dz.groups = []; dz.pal = [];
     const addPal = c => { if (!dz.pal.includes(c)) dz.pal.push(c); };
     dz.vB.items.forEach(it => {
@@ -958,24 +958,25 @@
     dz.a.camera.position.set(cx + span * 0.55, span * 0.62 + 2.2, cz + span * 0.72);
     dz.a.controls.update(); copyCam(dz.a, dz.b);
   }
-  function startDoan(i) {
+  // a new random template for this level, or the same one again when L is given
+  function startDoan(level, L) {
     exitView(); cancel(); select(null);
-    dz.i = i; dz.mistakes = 0; dz.hints = 0; dz.cur = 0;
+    dz.level = level || dz.level; dz.L = L || BV.Doan.generate(1 + Math.floor(Math.random() * 1e9), dz.level);
+    dz.mistakes = 0; dz.hints = 0; dz.cur = 0;
     $('doan').hidden = false; dz.open = true;
     scene.paused = true;
     if (!dz.a) setupDoan();
     dz.a.paused = dz.b.paused = false;
     dz.a.setNight(0);
     dz.a.resize(); dz.b.resize();
-    dz.vA = BV.Doan.village(i); dz.vB = BV.Doan.village(i);
+    dz.vA = BV.Doan.village(dz.L); dz.vB = BV.Doan.village(dz.L);
     dz.a.sync(dz.vA); dz.b.sync(dz.vB);
     dz.a.clearMarkers(); dz.b.clearMarkers();
     buildGroups();
     dz.groups.forEach(g => paintGroup(dz.vA, g, g.target));
     dz.a.sync(dz.vA);
     fitDoanCam();
-    const L = BV.Doan.LEVELS[i];
-    $('doanTitle').textContent = `도안 ${i + 1} · ${L.name}`;
+    $('doanTitle').textContent = `${dz.L.name} · ${BV.Doan.LEVEL[dz.level].label}`;
     $('doanDone').hidden = true;
     makeLabels(); renderDoanPal(); renderDoanProgress();
   }
@@ -986,8 +987,8 @@
   }
   $('doanExit').addEventListener('click', closeDoan);
   $('doanList2').addEventListener('click', () => { closeDoan(); renderDoanList(); openDlg('doanDlg'); });
-  $('doanAgain').addEventListener('click', () => startDoan(dz.i));
-  $('doanNext').addEventListener('click', () => startDoan((dz.i + 1) % BV.Doan.LEVELS.length));
+  $('doanAgain').addEventListener('click', () => startDoan(dz.level, dz.L));
+  $('doanNext').addEventListener('click', () => startDoan(dz.level));
 
   function renderDoanPal() {
     const box = $('doanPal'); box.replaceChildren();
@@ -1014,7 +1015,7 @@
     $('doanCount').textContent = `맞은 면 ${ok} / ${total}`;
     const pct = total ? Math.round(ok / total * 100) : 0;
     $('doanBar').style.width = pct + '%'; $('doanPct').textContent = pct + '%';
-    $('doanStars').textContent = starText(doanStars()[dz.i] || 0);
+    $('doanStars').textContent = '';
     if (total && ok === total) finishDoan();
   }
   // number tags on surfaces still to colour; positions follow the camera every frame
@@ -1072,17 +1073,17 @@
     dz.hints++;
     dz.cur = dz.pal.indexOf(g.target); renderDoanPal();
     const it = g.id ? dz.vB.items.find(x => x.id === g.id) : null;
-    const area = it || (() => { const r = BV.Doan.LEVELS[dz.i].roads; const m = r[Math.floor(r.length / 2)]; return { x: m[0], z: m[1], w: 1, d: 1 }; })();
+    const area = it || (() => { const r = dz.L.roads; const m = r[Math.floor(r.length / 2)]; return { x: m[0], z: m[1], w: 1, d: 1 }; })();
     dz.b.addMarker(area, 0xf2a516, 2.2); dz.a.addMarker(area, 0xf2a516, 2.2);
     doanMsg(`노란 동그라미 쪽을 ${dz.cur + 1}번 색으로 칠해 보세요`);
   });
   function finishDoan() {
     const stars = 1 + (dz.mistakes <= 3 ? 1 : 0) + (dz.hints === 0 ? 1 : 0);
-    const all = doanStars(); const best = Math.max(all[dz.i] || 0, stars); all[dz.i] = best; store.set(DOAN, JSON.stringify(all));
-    $('doanStars').textContent = starText(best);
+    const all = doanStats(); all[dz.level].done++; all[dz.level].stars += stars; store.set(DOAN, JSON.stringify(all));
+    $('doanStars').textContent = starText(stars);
     $('doanDoneStars').textContent = starText(stars);
     $('doanDoneText').textContent = `틀린 색 ${dz.mistakes}번 · 힌트 ${dz.hints}번` + (stars === 3 ? ' · 완벽해요!' : stars === 2 ? ' · 힌트 없이 하면 별 3개' : ' · 틀린 색 3번 이하면 별이 하나 더');
-    $('doanNext').hidden = dz.i === BV.Doan.LEVELS.length - 1;
+    $('doanNext').hidden = false;
     $('doanDone').hidden = false;
     doanMsg('다 칠했어요!');
   }
